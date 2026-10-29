@@ -21,7 +21,7 @@ Knowledge preservation system - reliable storage across chats, models, devices
 - Workspace: /storage/emulated/0/Android/data/com.androidharness.app/files/workspace (AndroidHarness, app UID)
 - Details: docs/ (version controlled in git)
 - Key facts: .harness/memory.md (core, auto-loaded) + .harness/memory/*.md (topics)
-- Git initialized, no remote yet
+- Git initialized, remote configured to GitHub; push/pull synchronization unverified
 
 ## Environment
 - Android 16, API 36, Linux toolchain present
@@ -33,3 +33,18 @@ Knowledge preservation system - reliable storage across chats, models, devices
 - Verify before claiming
 - Build incrementally, blueprint first before multiple agents
 - Dual-layer: workspace for details, memory for key facts
+
+## Current Session State (Auto-surfaced at conversation start)
+- **Milestone:** Knowledge Preservation System — Implementation Complete
+- **Phase:** First Business Project — Phase 0 Ready
+- **Current Next Action:** Implement Phase 0 (Manual WhatsApp Follow-up) — add localStorage cart persistence to trisutro.bond, begin daily manual review
+- **Blockers:** No genuine multi-agent delegation (platform single-agent only); GitHub push DNS failure; no executable runtime; Meta Business verification not yet started (Phase 1 blocker)
+- **Key References:** 
+  - PROGRESS.md — 23/25 items completed
+  - DECISIONS.md — 9 documented decisions with rationale
+  - KNOWLEDGE_PRESERVATION.md — dual-layer storage + session workflow
+  - MASTER_BLUEPRINT.md — Virtual CEO system architecture
+  - agents/partner/OPERATING_INSTRUCTIONS.md — Partner procedures
+  - agents/coding-agent/SPECIFICATION.md — Coding Agent spec (specification only, not runnable)
+  - tasks/TASK-001-verify-file-operations.md — completed manually (file ops verified)
+  - projects/trisutro-whatsapp-cart-recovery/ — SPECIFICATION.md (two-phase) + OPPORTUNITY_ANALYSIS.md
