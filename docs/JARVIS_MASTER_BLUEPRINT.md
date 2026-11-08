@@ -1,8 +1,15 @@
-# JARVIS — Canonical Master Blueprint
+# JARVIS — Canonical Master Blueprint (Consolidated v1.0 Archive)
+
+> **CONSOLIDATION NOTICE (2026-11-08):**  
+> This specification has been officially consolidated into the authoritative **[docs/MASTER_BLUEPRINT.md](MASTER_BLUEPRINT.md)** (Version 2.0.0).  
+> For all current architectural decisions, system designs, roadmap phases, and operational procedures, refer to `docs/MASTER_BLUEPRINT.md`.  
+> The original text of Blueprint v1.0 is preserved below in its entirety for complete historical provenance and continuity.
+
+---
 
 **Version:** 1.0  
 **Created:** 2025-10-29  
-**Status:** ACTIVE — Canonical project blueprint  
+**Status:** CONSOLIDATED into `docs/MASTER_BLUEPRINT.md` (v2.0)  
 **Owner:** User + JARVIS (Virtual CEO)  
 **Repository:** https://github.com/sakibtrisutro/jarves.git (main branch)
 
@@ -37,7 +44,7 @@ JARVIS is the Virtual CEO and central coordinator for TRISUTRO. Mission: help th
 
 ## 2. ENVIRONMENT & CAPABILITIES
 
-### 2.1 AndroidHarness Environment (VERIFIED)
+### 2.1 AndroidHarness Environment (VERIFIED HISTORICAL)
 - **Workspace:** `/storage/emulated/0/Android/data/com.androidharness.app/files/workspace`
 - **OS:** Android 16 (API 36), app UID 10228
 - **Shell:** Linux toolchain (bash, git, python3, node, npm, curl, etc.)
@@ -69,7 +76,7 @@ JARVIS is the Virtual CEO and central coordinator for TRISUTRO. Mission: help th
 
 | Document | Purpose | Authority |
 |----------|---------|-----------|
-| **`docs/JARVIS_MASTER_BLUEPRINT.md`** (this file) | Canonical architecture, rules, capabilities | **HIGHEST** — single source of truth |
+| **`docs/MASTER_BLUEPRINT.md`** | Canonical architecture, rules, capabilities | **HIGHEST** — single source of truth |
 | **`docs/DECISIONS.md`** | Decision log with rationale | **AUTHORITATIVE** — immutable history |
 | **`docs/PROGRESS.md`** | Milestone tracking, task status | **AUTHORITATIVE** — current state |
 | **`docs/KNOWLEDGE_PRESERVATION.md`** | Session workflow, storage strategy | **AUTHORITATIVE** — continuity procedures |
@@ -80,10 +87,7 @@ JARVIS is the Virtual CEO and central coordinator for TRISUTRO. Mission: help th
 | **`tasks/TASK-*.md`** | Task records with verification | **AUTHORITATIVE** — task evidence |
 | **`projects/*/SPECIFICATION.md`** | Project specifications | **AUTHORITATIVE** — implementation details |
 | **`projects/*/OPPORTUNITY_ANALYSIS.md`** | Business analysis | **REFERENCE** — decision support |
-| **`docs/MASTER_BLUEPRINT.md`** | Legacy TRISUTRO blueprint | **SUPERSEDED** — reference only |
 | **`docs/SESSION_STATE_*.md`** | Session snapshots | **HISTORICAL** — archival |
-
-> **Rule:** When documents conflict, this blueprint (JARVIS_MASTER_BLUEPRINT.md) + DECISIONS.md + PROGRESS.md take precedence. Legacy MASTER_BLUEPRINT.md is retained for history only.
 
 ---
 
@@ -127,21 +131,12 @@ planned | in_progress | blocked | verification_required | completed
 <ISO timestamp>
 ```
 
-### 4.2 Task Status Definitions
-- **planned** — Not started, all prerequisites identified
-- **in_progress** — Work begun, changes tracked
-- **blocked** — External dependency (owner approval, missing file, network)
-- **verification_required** — Work done, awaiting test/evidence
-- **completed** — **Evidence verified**, no further action needed
-
-> **Rule:** Never mark `completed` without evidence in the task record.
-
 ---
 
 ## 5. CHECKPOINT & RECOVERY PROTOCOL
 
 ### 5.1 Session Start Checklist
-1. Read `docs/JARVIS_MASTER_BLUEPRINT.md` (this file)
+1. Read `docs/MASTER_BLUEPRINT.md`
 2. Read `.harness/memory.md` (auto-loaded)
 3. Read `docs/PROGRESS.md` for milestone status
 4. Read `docs/DECISIONS.md` for recent decisions
@@ -153,102 +148,25 @@ After each meaningful milestone:
 1. Update task record (`tasks/TASK-*.md`)
 2. Update `docs/PROGRESS.md` if milestone
 3. Update `.harness/memory.md` Current Session State
-3. `git add -A && git commit -m "checkpoint: <description>"` (when appropriate)
 4. Record: files changed, tests run, next action
-
-### 5.3 Session End / Model Switch
-1. Complete Session End checklist above
-2. Ensure `git push origin main` if commits made
-3. Verify remote: `git log --oneline -1` matches remote
-
-### 5.4 Recovery on New Session
-1. Run Session Start Checklist
-2. Compare `docs/PROGRESS.md` + task record vs actual `git status`
-3. If discrepancy: investigate, do not assume unverified work succeeded
-4. Resume from last **verified** checkpoint
 
 ---
 
 ## 6. GIT & SECURITY RULES
 
 ### 6.1 Commit Rules
-- Clear, descriptive messages: `<type>: <description>` (e.g., `checkpoint: TASK-002 file ops verified`)
+- Clear, descriptive messages: `<type>: <description>`
 - Small, logical commits
 - Review diff before commit: `git diff --cached`
 - No secrets, API keys, .env files
 
 ### 6.2 Push Rules
 - Verify remote URL: `git remote -v`
-- `git fetch` before push if network allows
 - Never force-push
-- Verify remote after push: `git log --oneline -1` matches
 
 ### 6.3 Secrets
 - **Never** commit `.env`, `*.key`, `*.pem`, tokens, passwords
-- AndroidHarness credential helper manages GitHub auth
-- `.harness/memory.md` must not contain secrets
 
 ---
 
-## 7. CURRENT STATE & PRIORITIES
-
-### 7.1 Active Milestone
-**Knowledge Preservation System — Implementation Complete**  
-**Phase:** First Business Project — Phase 0 Ready (TRISUTRO WhatsApp Cart Recovery)
-
-### 7.2 Active Task
-**TASK-001** — COMPLETED ✅ (file operations verified)  
-**TASK-002** — PENDING: Implement checkpoint/recovery test
-
-### 7.3 Blockers (P0)
-| Blocker | Status | Resolution |
-|---------|--------|------------|
-| No executable app runtime | Documented | By design (DEC-011) |
-| No multi-agent delegation | Documented | Platform limitation (DEC-011) |
-| GitHub push DNS failure | **RESOLVED** 2025-10-29 | Network restored |
-| Meta Business verification | Pending owner | Phase 1 blocker |
-| Google GenAI SDK not installed | Not needed for docs | Install if tool-calling needed |
-
-### 7.4 Next Actions (Priority Order)
-1. **P0** — Test checkpoint/recovery workflow (TASK-002)
-2. **P1** — Fix Gemini tool-calling schema (`additionalProperties` error)
-3. **P1** — Document provider capability matrix
-4. **P2** — Meta Business verification (owner action required)
-4. **P2** — TRISUTRO Phase 0 implementation (owner deployment access)
-
----
-
-## 8. PROVIDER SWITCHING — REALISTIC LIMITATIONS
-
-| Capability | Supported | Notes |
-|------------|-----------|-------|
-| Automatic model switching | ❌ No | AndroidHarness single-model env |
-| Provider fallback chain | ❌ No | Not configured/visible |
-| Cross-session recovery | ⚠️ Partial | `.harness/memory.md` auto-loads; task state requires manual reload |
-| Cross-device sync | ⚠️ Git only | Requires `git push/pull`; network-dependent |
-| Quota/rate-limit handling | ❌ No | No quota visibility in env |
-| Schema compatibility | ⚠️ Manual | `additionalProperties` must be removed manually |
-
-> **Key Principle:** Do not claim automatic provider switching works. Design for manual handoff with verified checkpoints.
-
----
-
-## 9. TOKEN EFFICIENCY RULES
-
-- Read each file **once** per unchanged state
-- Use `grep`/`search_files` instead of full `read_file` when possible
-- Batch independent diagnostics in one turn
-- Don't re-read unchanged files across turns
-- Document changes incrementally
-
----
-
-## 10. CHANGE LOG
-
-| Date | Change | By |
-|------|--------|----|
-| 2025-10-29 | Created canonical blueprint from consolidated docs | JARVIS |
-
----
-**END OF CANONICAL MASTER BLUEPRINT**  
-All existing documents preserved. This blueprint is the single source of truth for architecture, rules, and capabilities.
+**END OF HISTORICAL BLUEPRINT ARCHIVE**
