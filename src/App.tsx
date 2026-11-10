@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, Volume2, Sparkles, Activity, Settings as SettingsIcon, LogOut, KeyRound } from 'lucide-react';
+import { Bot, Send, Volume2, Sparkles, Activity, Settings as SettingsIcon, LogOut, ShieldCheck, Zap } from 'lucide-react';
 import { AuthScreen } from './components/AuthScreen.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { DiagnosticsModal } from './components/DiagnosticsModal.tsx';
@@ -30,11 +30,31 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [systemHealth, setSystemHealth] = useState<any>(null);
+  const [modelStatus, setModelStatus] = useState<any>({
+    isConfigured: false,
+    provider: 'NOT CONFIGURED',
+    activeModel: 'NONE',
+    bootstrap: { status: 'NOT INITIALIZED' },
+  });
+
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [autoReadAloud, setAutoReadAloud] = useState(true);
   const [activeSpeakingId, setActiveSpeakingId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchModelStatus = async () => {
+    try {
+      const res = await fetch('/api/models/status');
+      if (res.ok) {
+        setModelStatus(await res.json());
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchModelStatus();
+  }, []);
 
   // Set welcome message when user logs in
   useEffect(() => {
@@ -43,10 +63,10 @@ export default function App() {
         {
           id: 'msg_welcome',
           role: 'assistant',
-          content: `Welcome back, ${currentUser.username}. J.A.R.V.I.S. is initialized with your dedicated personal assistant context and voice personality (${currentUser.voicePersonality}).\n\nHow may I assist you today?`,
+          content: `Welcome back, ${currentUser.username}. J.A.R.V.I.S. is initialized with your personal assistant context and voice personality (${currentUser.voicePersonality}).\n\nHow may I assist you today?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          provider: 'JARVIS Model Intelligence',
-          model: 'gemini-3.8-flash',
+          provider: modelStatus.isConfigured ? modelStatus.provider : 'NOT CONFIGURED',
+          model: modelStatus.isConfigured ? modelStatus.activeModel : 'NONE',
         },
       ]);
     }
@@ -125,8 +145,8 @@ export default function App() {
         role: 'assistant',
         content: data.text,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        provider: data.provider || 'Google Gemini',
-        model: data.model || 'gemini-3.8-flash',
+        provider: data.provider || 'JARVIS',
+        model: data.model || 'NONE',
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -140,7 +160,7 @@ export default function App() {
         {
           id: `err_${Date.now()}`,
           role: 'assistant',
-          content: `Communication exception: ${err.message}. Please check Diagnostics.`,
+          content: `Communication exception: ${err.message}. Please check Settings -> API Keys & Providers.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -157,7 +177,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       
       {/* Header */}
-      <header className="bg-slate-950/95 border-b border-cyan-500/20 px-6 py-3.5 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between">
+      <header className="bg-slate-950/95 border-b border-cyan-500/20 px-6 py-3.5 backdrop-blur-md sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-slate-900 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
             <Bot className="w-5 h-5 animate-pulse" />
@@ -173,6 +193,28 @@ export default function App() {
           </div>
         </div>
 
+        {/* Runtime Status Indicators */}
+        <div className="flex items-center gap-2 font-mono text-[11px]">
+          <span className={`px-2.5 py-1 rounded-lg border font-bold ${
+            modelStatus.isConfigured
+              ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+              : 'bg-rose-950/80 text-rose-400 border-rose-800 animate-pulse'
+          }`}>
+            AI PROVIDER: {modelStatus.isConfigured ? modelStatus.provider.toUpperCase() : 'NOT CONFIGURED'}
+          </span>
+
+          <span className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-slate-300">
+            MODEL: <strong className="text-cyan-400">{modelStatus.activeModel}</strong>
+          </span>
+
+          {modelStatus.forceModel && (
+            <span className="bg-cyan-950 text-cyan-300 border border-cyan-500 px-2 py-1 rounded font-bold">
+              FORCE MODE
+            </span>
+          )}
+        </div>
+
+        {/* Action Buttons */}
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setIsDiagnosticsOpen(true)}
@@ -184,7 +226,7 @@ export default function App() {
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 text-xs font-semibold flex items-center gap-2"
-            title="Settings & Intelligence"
+            title="Settings & Model Control Center"
           >
             <SettingsIcon className="w-4 h-4" />
           </button>
@@ -199,8 +241,22 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main chat stream */}
+      {/* Main Chat Stream */}
       <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 max-w-5xl mx-auto w-full space-y-5">
+        {!modelStatus.isConfigured && (
+          <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-300 text-xs leading-relaxed flex items-center justify-between">
+            <div>
+              <strong>AI Provider is Not Configured.</strong> Please open Settings → API Keys & Providers to enter your Gemini, OpenAI, or OpenRouter API key.
+            </div>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-3 py-1.5 rounded bg-amber-500 text-slate-950 font-bold hover:bg-amber-400"
+            >
+              Configure API Keys
+            </button>
+          </div>
+        )}
+
         {messages.map((msg) => {
           const isUser = msg.role === 'user';
           const isSpeaking = activeSpeakingId === msg.id;
@@ -242,7 +298,7 @@ export default function App() {
               <Sparkles className="w-4 h-4 animate-spin" />
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-3.5 text-xs text-cyan-300 font-mono">
-              JARVIS Model Intelligence selecting optimal model & routing request...
+              JARVIS Model Intelligence routing request...
             </div>
           </div>
         )}
@@ -281,8 +337,12 @@ export default function App() {
       {/* Modals */}
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={() => {
+          setIsSettingsOpen(false);
+          fetchModelStatus();
+        }}
         currentUser={currentUser.username}
+        onSettingsSaved={() => fetchModelStatus()}
       />
 
       <DiagnosticsModal

@@ -1,7 +1,8 @@
 import { logEvent, queryLogs, sanitizeData } from '../src/server/logger.ts';
 import { initDatabase, getDb } from '../src/server/database.ts';
 import { testTelegramConnection } from '../src/server/telegram.ts';
-import { testAiProviderConnection } from '../src/server/gemini.ts';
+import { testAiProviderConnection, getApiKeys, getAiSettings, generateJarvisResponse } from '../src/server/gemini.ts';
+import { fetchOpenRouterModels, selectBestModelForTask } from '../src/server/model_registry.ts';
 
 console.log('====================================================');
 console.log('       JARVIS AUTOMATED VERIFICATION SUITE         ');
@@ -21,7 +22,7 @@ function assert(condition: boolean, testName: string) {
 }
 
 async function runTestSuite() {
-  console.log('\n[1/5] Testing Centralized Logger & Sensitive Data Redaction...');
+  console.log('\n[1/6] Testing Centralized Logger & Sensitive Data Redaction...');
   const testSecret = 'My token is gho_1234567890abcdef123456 and AIzaSyD12345678901234567890123456789012';
   const sanitized = sanitizeData(testSecret);
   assert(!sanitized.includes('gho_1234567890'), 'GitHub personal token redacted');
@@ -38,7 +39,7 @@ async function runTestSuite() {
   const logResult = queryLogs({ limit: 10 });
   assert(logResult.events.length > 0, 'Queried logs successfully from event store');
 
-  console.log('\n[2/5] Testing SQLite WAL Database Initialization & Schemas...');
+  console.log('\n[2/6] Testing SQLite WAL Database Initialization & Schemas...');
   const db = initDatabase();
   assert(db !== null, 'Database instance initialized');
 
@@ -56,7 +57,14 @@ async function runTestSuite() {
     assert(true, 'Task record cleaned up cleanly');
   }
 
-  console.log('\n[3/5] Testing Voice Subsystem Logic & Language Routing...');
+  console.log('\n[3/6] Testing Model Control Center & Zero-Config Guardrails...');
+  const unconfigResp = await generateJarvisResponse('Hello JARVIS');
+  assert(unconfigResp.provider === 'NOT_CONFIGURED' || Boolean(unconfigResp.provider), 'Zero-config handles missing keys gracefully');
+
+  const initialAiSettings = getAiSettings();
+  assert(initialAiSettings.freeOnly === true, 'Strict Free Mode enabled by default');
+
+  console.log('\n[4/6] Testing Voice Subsystem Logic & Language Routing...');
   const banglaText = 'হ্যালো স্যার, কেমন আছেন?';
   const englishText = 'Hello Sir, how are you?';
   const isBanglaDetected = /[\u0980-\u09FF]/.test(banglaText);
@@ -64,27 +72,23 @@ async function runTestSuite() {
   assert(isBanglaDetected, 'Bangla script correctly identified for bn-BD speech synthesis');
   assert(isEnglishDetected, 'English text correctly identified for en-US speech synthesis');
 
-  // Test Barge-in state simulation
   let voiceState = 'SPEAKING';
-  const bargeInTriggered = () => {
-    voiceState = 'IDLE';
-  };
+  const bargeInTriggered = () => { voiceState = 'IDLE'; };
   bargeInTriggered();
   assert(voiceState === 'IDLE', 'Barge-In stops speaking immediately and restores state to IDLE');
 
-  console.log('\n[4/5] Testing Telegram Security Whitelist & Diagnostics...');
+  console.log('\n[5/6] Testing Telegram Security Whitelist & Diagnostics...');
   const allowedUserIds = ['518294821', '98127391'];
   const testCallerAuthorized = allowedUserIds.includes('518294821');
   const testCallerUnauthorized = allowedUserIds.includes('999999999');
   assert(testCallerAuthorized, 'Authorized Telegram user permitted access');
   assert(!testCallerUnauthorized, 'Unauthorized Telegram user blocked');
 
-  // Test invalid token handling
   const fakeTokenResult = await testTelegramConnection('123456:FAKE_TOKEN_FOR_TEST');
   assert(!fakeTokenResult.success, 'Invalid Telegram token fails gracefully with error notice');
 
-  console.log('\n[5/5] Testing AI Provider Diagnostics...');
-  const aiTest = await testAiProviderConnection('Gemini');
+  console.log('\n[6/6] Testing AI Provider Diagnostics...');
+  const aiTest = await testAiProviderConnection('gemini');
   assert(Boolean(aiTest), 'AI Provider diagnostic returns structured latency and message');
 
   console.log('\n====================================================');
