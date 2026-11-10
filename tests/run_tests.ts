@@ -133,6 +133,18 @@ async function runTestSuite() {
   staleOnEndCallback('session_test_101');
   assert(!staleCallbackExecuted, 'Stale callbacks rejected safely without mutating state or triggering audio');
 
+  console.log('\n[8/8] Testing Session Management & Token Persistence...');
+  const { createSession, verifySession, revokeSession } = await import('../src/server/auth.ts');
+  const sess = createSession('Sakib', true);
+  assert(Boolean(sess && sess.token), 'Persistent session created with secure token');
+  
+  const verified = verifySession(sess!.token);
+  assert(verified && verified.username === 'Sakib', 'Session token verified against secure hash store');
+  
+  revokeSession(sess!.token);
+  const revoked = verifySession(sess!.token);
+  assert(revoked === null, 'Session revoked successfully from active registry');
+
   console.log('\n====================================================');
   console.log(`RESULTS: ${passedTests}/${totalTests} Tests Passed successfully.`);
   console.log('====================================================\n');

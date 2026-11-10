@@ -354,6 +354,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, c
               </div>
             )}
 
+            {activeTab === 'system' && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-100 mb-2">Email & Account Recovery</h3>
+                  <p className="text-sm text-slate-400">Configure SMTP protocols to enable autonomous password recovery and system alerts.</p>
+                </div>
+                <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-8 space-y-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">SMTP Host</label>
+                       <input type="text" placeholder="smtp.gmail.com" className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">SMTP Port</label>
+                       <input type="text" placeholder="587" className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">Sender Identity</label>
+                     <input type="text" placeholder="JARVIS OS <noreply@trisutro.bond>" className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100" />
+                  </div>
+                  <button className="w-full py-3 rounded-xl bg-slate-100 text-slate-950 font-bold text-sm hover:bg-white transition-all active:scale-[0.98]">
+                    SAVE SMTP CONFIGURATION
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'accounts' && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div>

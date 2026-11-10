@@ -1,19 +1,51 @@
-import React, { useState } from 'react';
-import { Bot, Lock, User, KeyRound, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bot, Lock, User, KeyRound, Loader2, Sparkles, AlertCircle, Eye, EyeOff, CheckCircle2, ChevronRight, Mail } from 'lucide-react';
 
 interface AuthScreenProps {
-  onLoginSuccess: (user: { username: string; role: string; voicePersonality: string; mustChangePassword: boolean }) => void;
+  onLoginSuccess: (user: { username: string; role: string; voicePersonality: string; mustChangePassword: boolean; token: string }) => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [selectedUser, setSelectedUser] = useState<'Sakib' | 'Sanjida'>('Sakib');
   const [password, setPassword] = useState('1234');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
+  const [success, setStatusSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [needsPasswordChangeUser, setNeedsPasswordChangeUser] = useState<string | null>(null);
+
+  // Auto-login if token exists
+  useEffect(() => {
+    const token = localStorage.getItem('jarvis_session_token');
+    if (token) {
+      checkSession(token);
+    }
+  }, []);
+
+  const checkSession = async (token: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onLoginSuccess({ ...data.user, token });
+      } else {
+        localStorage.removeItem('jarvis_session_token');
+      }
+    } catch {
+      localStorage.removeItem('jarvis_session_token');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +56,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: selectedUser, password }),
+        body: JSON.stringify({ username: selectedUser, password, rememberMe }),
       });
 
       const data = await res.json();
@@ -36,7 +68,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         setNeedsPasswordChangeUser(data.user.username);
         setIsChangingPassword(true);
       } else {
-        onLoginSuccess(data.user);
+        if (rememberMe) {
+          localStorage.setItem('jarvis_session_token', data.token);
+        }
+        onLoginSuccess({ ...data.user, token: data.token });
       }
     } catch (err: any) {
       setError(err.message || 'Login error');
@@ -47,8 +82,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword || newPassword.length < 4) {
+    setError('');
+    
+    if (newPassword.length < 4) {
       setError('Password must be at least 4 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
@@ -61,17 +102,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ username, newPassword }),
       });
 
-      if (!res.ok) throw new Error('Password update failed');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Password update failed');
 
-      // Now proceed to login
+      setStatusSuccess('Password updated successfully. Logging in...');
+      
+      // Auto login after success
       const loginRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password: newPassword }),
+        body: JSON.stringify({ username, password: newPassword, rememberMe }),
       });
-      const data = await loginRes.json();
+      const loginData = await loginRes.json();
+      
       if (loginRes.ok) {
-        onLoginSuccess(data.user);
+        if (rememberMe) localStorage.setItem('jarvis_session_token', loginData.token);
+        setTimeout(() => onLoginSuccess({ ...loginData.user, token: loginData.token }), 1000);
+      } else {
+        throw new Error(loginData.error || 'Auto-login failed after password change');
       }
     } catch (err: any) {
       setError(err.message);
@@ -80,113 +128,193 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans text-slate-100">
-      <div className="bg-slate-900 border border-cyan-500/30 rounded-2xl w-full max-w-md p-8 shadow-2xl shadow-cyan-950/60 relative overflow-hidden">
-        
-        {/* Glow backdrop */}
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 mb-4 shadow-inner shadow-cyan-950">
-            <Bot className="w-8 h-8 animate-pulse" />
+  if (isForgotPassword) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans text-slate-100">
+        <div className="bg-slate-900 border border-indigo-500/30 rounded-3xl w-full max-w-md p-10 shadow-2xl relative overflow-hidden">
+           <div className="flex flex-col items-center text-center mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-6">
+              <KeyRound className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight">Account Recovery</h1>
+            <p className="text-sm text-slate-400 mt-2 pr-4 pl-4">Provide your verified email address to receive a secure recovery link.</p>
           </div>
-          <h1 className="text-2xl font-black tracking-widest font-mono text-slate-100">J.A.R.V.I.S.</h1>
-          <p className="text-xs text-slate-400 mt-1">TRISUTRO Virtual CEO & Personal Assistant OS</p>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">Verified Email</label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                <input type="email" placeholder="sakib@example.com" className="w-full bg-slate-950 border border-slate-800 rounded-2xl pl-12 pr-4 py-4 text-sm focus:outline-none focus:border-indigo-500 transition-all" />
+              </div>
+            </div>
+            <button className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/20">SEND RECOVERY LINK</button>
+            <button onClick={() => setIsForgotPassword(false)} className="w-full text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest">Return to Login</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans text-slate-100 selection:bg-cyan-500/30">
+      <div className="bg-slate-900 border border-white/5 rounded-[2.5rem] w-full max-w-md p-10 shadow-[0_0_80px_rgba(0,0,0,0.5)] relative overflow-hidden">
+        
+        {/* Animated Background Gradients */}
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-cyan-500/10 rounded-full blur-[100px] animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-600/10 rounded-full blur-[100px] animate-pulse delay-700" />
+
+        <div className="flex flex-col items-center text-center mb-10 relative z-10">
+          <div className="w-20 h-20 rounded-3xl bg-slate-950 border border-white/10 flex items-center justify-center text-cyan-400 mb-6 shadow-2xl">
+            <Bot className="w-10 h-10 animate-pulse" />
+          </div>
+          <h1 className="text-3xl font-black tracking-tighter text-white">J.A.R.V.I.S. <span className="text-cyan-500 text-sm font-mono tracking-widest ml-1">OS</span></h1>
+          <p className="text-[10px] text-slate-500 font-mono tracking-[0.2em] uppercase mt-2 opacity-70 font-bold">Executive Intelligence System</p>
         </div>
 
         {error && (
-          <div className="mb-6 bg-rose-950/60 border border-rose-500/40 rounded-xl p-3 text-xs text-rose-300 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{error}</span>
+          <div className="mb-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-xs text-rose-400 flex items-start gap-3 animate-in slide-in-from-top-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="font-medium leading-relaxed">{error}</span>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-xs text-emerald-400 flex items-center gap-3 animate-in slide-in-from-top-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="font-medium">{success}</span>
           </div>
         )}
 
         {!isChangingPassword ? (
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">Select User Account</label>
+          <form onSubmit={handleLogin} className="space-y-6 relative z-10">
+            <div className="space-y-3">
+              <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">Identity Selection</label>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setSelectedUser('Sakib'); setPassword('1234'); }}
-                  className={`py-3 px-4 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
-                    selectedUser === 'Sakib'
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500 shadow-md shadow-cyan-950'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  <User className="w-4 h-4" /> Sakib (Male Voice)
-                </button>
+                {(['Sakib', 'Sanjida'] as const).map(user => (
+                  <button
+                    key={user}
+                    type="button"
+                    onClick={() => { setSelectedUser(user); setPassword('1234'); }}
+                    className={`group py-4 px-4 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-2 ${
+                      selectedUser === user
+                        ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_20px_rgba(6,182,212,0.15)]'
+                        : 'bg-slate-950/50 text-slate-500 border-white/5 hover:border-white/10 hover:text-slate-300'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl transition-colors ${selectedUser === user ? 'bg-cyan-500/20' : 'bg-slate-900 group-hover:bg-slate-800'}`}>
+                      <User className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-black tracking-wide uppercase">{user}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
+            <div className="space-y-3">
+              <div className="flex justify-between items-center px-1">
+                <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Access Key</label>
+                <button type="button" onClick={() => setIsForgotPassword(true)} className="text-[10px] font-mono font-bold text-slate-600 hover:text-cyan-500 transition-colors uppercase tracking-widest">Recovery?</button>
+              </div>
+              <div className="relative group">
+                <Lock className="w-4 h-4 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-cyan-500 transition-colors" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password required"
+                  className="w-full bg-slate-950 border border-white/5 rounded-2xl pl-12 pr-12 py-4 text-sm text-white focus:outline-none focus:border-cyan-500/50 transition-all font-medium placeholder:text-slate-700"
+                />
                 <button
                   type="button"
-                  onClick={() => { setSelectedUser('Sanjida'); setPassword('1234'); }}
-                  className={`py-3 px-4 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
-                    selectedUser === 'Sanjida'
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500 shadow-md shadow-cyan-950'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition-colors"
                 >
-                  <User className="w-4 h-4" /> Sanjida (Female Voice)
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">Password (Initial default: 1234)</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <div className="flex items-center gap-3 px-1">
+              <div className="relative flex items-center">
                 <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
+                  type="checkbox"
+                  id="remember"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-5 h-5 rounded-lg bg-slate-950 border-white/5 text-cyan-500 focus:ring-0 transition-all cursor-pointer appearance-none checked:bg-cyan-500 border border-white/10"
                 />
+                {rememberMe && <CheckCircle2 className="w-3 h-3 text-slate-950 absolute left-1 pointer-events-none" />}
               </div>
+              <label htmlFor="remember" className="text-xs font-bold text-slate-400 select-none cursor-pointer">Remember this executive session</label>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 active:scale-95 transition-all shadow-lg shadow-cyan-950 flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-5 rounded-2xl bg-cyan-500 text-slate-950 font-black text-sm hover:bg-cyan-400 active:scale-[0.98] transition-all shadow-[0_8px_30px_rgba(6,182,212,0.3)] flex items-center justify-center gap-3 disabled:opacity-50 uppercase tracking-widest"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              Sign In to JARVIS
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              Initialize Connection
             </button>
           </form>
         ) : (
-          <form onSubmit={handleChangePassword} className="space-y-5">
-            <div className="bg-amber-950/40 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300">
-              For security, please change your temporary default password (1234) for <b>{needsPasswordChangeUser}</b>.
+          <form onSubmit={handleChangePassword} className="space-y-6 relative z-10 animate-in slide-in-from-right-4 duration-500">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-5 text-[11px] leading-relaxed text-amber-400/90 font-medium">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-4 h-4" />
+                <span className="font-black uppercase tracking-widest">Protocol Required</span>
+              </div>
+              For security, please redefine the temporary access key for executive profile: <span className="text-amber-300 font-bold">{needsPasswordChangeUser}</span>.
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">New Secure Password</label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new password (min 4 chars)"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-cyan-500"
-                />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">New Access Key</label>
+                <div className="relative group">
+                  <KeyRound className="w-4 h-4 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-cyan-500 transition-colors" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 4 characters"
+                    className="w-full bg-slate-950 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-cyan-500/50 transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">Confirm Access Key</label>
+                <div className="relative group">
+                  <CheckCircle2 className="w-4 h-4 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-cyan-500 transition-colors" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Verify key"
+                    className="w-full bg-slate-950 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-cyan-500/50 transition-all font-medium"
+                  />
+                </div>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 active:scale-95 transition-all shadow-lg shadow-cyan-950 flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-5 rounded-2xl bg-white text-slate-950 font-black text-sm hover:bg-slate-100 active:scale-[0.98] transition-all shadow-2xl flex items-center justify-center gap-3 disabled:opacity-50 uppercase tracking-widest"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              Update Password & Continue
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ChevronRight className="w-5 h-5" />}
+              Apply Security Policy
             </button>
+            
+            <button type="button" onClick={() => setIsChangingPassword(false)} className="w-full text-[10px] font-black text-slate-600 hover:text-slate-400 transition-colors uppercase tracking-[0.2em]">Abort Restoration</button>
           </form>
         )}
 
+      </div>
+      
+      {/* Footer Branding */}
+      <div className="fixed bottom-8 text-[10px] font-mono text-slate-600 tracking-[0.3em] uppercase">
+        Trisutro Autonomous Technologies
       </div>
     </div>
   );
