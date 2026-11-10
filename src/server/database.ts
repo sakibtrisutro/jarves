@@ -102,5 +102,18 @@ function runMigrations(db: any) {
       value_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    -- 5. Tasks Table
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      priority TEXT NOT NULL DEFAULT 'normal',
+      assignee TEXT,
+      due_date TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
