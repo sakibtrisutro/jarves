@@ -1,37 +1,8 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Environments & Virtual Envs
-.venv/
-venv/
-ENV/
-env/
-
-# Configuration & Secrets
-.env
-*.env.local
-*.key
-*.token
-
-# Data & Persistence
-data/*.db
-data/*.db-wal
-data/*.db-shm
-data/backups/*.db
-data/logs/*.log
-data/logs/*.jsonl
-
-# Testing & Cache
-.pytest_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Operating System Files
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
+node_modules/
+build/
+dist/
+coverage/
 .DS_Store
+*.log
+.env*
+!.env.example
