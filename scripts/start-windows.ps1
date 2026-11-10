@@ -14,7 +14,7 @@ Write-Host ""
 # 1. Check if node process is already running on port 3000
 $existingPort = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
 if ($existingPort) {
-    Write-Host "✓ JARVIS is already active on port 3000." -ForegroundColor Green
+    Write-Host "  [OK] JARVIS is already active on port 3000." -ForegroundColor Green
     Start-Process "http://localhost:3000"
     Exit 0
 }
@@ -34,7 +34,7 @@ for ($i = 1; $i -le $maxAttempts; $i++) {
         $resp = Invoke-RestMethod -Uri "http://localhost:3000/api/health" -Method Get -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($resp -and ($resp.status -eq "healthy" -or $resp.subsystems)) {
             $healthVerified = $true
-            Write-Host "  ✓ Backend health check verified in ${i}s." -ForegroundColor Green
+            Write-Host "  [OK] Backend health check verified in ${i}s." -ForegroundColor Green
             break
         }
     } catch {
@@ -46,10 +46,10 @@ for ($i = 1; $i -le $maxAttempts; $i++) {
 if ($healthVerified) {
     Write-Host "Opening web dashboard..." -ForegroundColor Cyan
     Start-Process "http://localhost:3000"
-    Write-Host "✓ JARVIS operational at http://localhost:3000" -ForegroundColor Green
+    Write-Host "  [OK] JARVIS operational at http://localhost:3000" -ForegroundColor Green
     Exit 0
 } else {
-    Write-Host "❌ JARVIS server failed to start or respond to health check within $maxAttempts seconds." -ForegroundColor Red
+    Write-Host "  [ERROR] JARVIS server failed to start or respond to health check within $maxAttempts seconds." -ForegroundColor Red
     Write-Host "Please check the logs folder or run diagnostics.bat for details." -ForegroundColor Yellow
     Exit 1
 }

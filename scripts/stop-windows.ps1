@@ -11,10 +11,10 @@ try {
         $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
         foreach ($pidToKill in $pids) {
             Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
-            Write-Host "✓ Terminated JARVIS process (PID: $pidToKill)" -ForegroundColor Green
+            Write-Host "  [OK] Terminated JARVIS process (PID: $pidToKill)" -ForegroundColor Green
         }
     } else {
-        Write-Host "No active JARVIS server detected on port 3000." -ForegroundColor Gray
+        Write-Host "  [INFO] No active JARVIS server detected on port 3000." -ForegroundColor Gray
     }
 } catch {
     Write-Host "Notice during process shutdown: $_" -ForegroundColor Gray

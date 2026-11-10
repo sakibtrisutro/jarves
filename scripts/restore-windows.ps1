@@ -12,10 +12,10 @@ if (Test-Path $backupsDir) {
     if ($latestBackup) {
         Write-Host "Found latest backup: $($latestBackup.FullName)" -ForegroundColor Cyan
         Copy-Item $latestBackup.FullName $dbPath -Force
-        Write-Host "✓ Database successfully restored from $($latestBackup.Name)" -ForegroundColor Green
+        Write-Host "  [OK] Database successfully restored from $($latestBackup.Name)" -ForegroundColor Green
     } else {
-        Write-Host "❌ No database backups found in $backupsDir" -ForegroundColor Red
+        Write-Host "  [ERROR] No database backups found in $backupsDir" -ForegroundColor Red
     }
 } else {
-    Write-Host "❌ Backups folder does not exist at $backupsDir" -ForegroundColor Red
+    Write-Host "  [ERROR] Backups folder does not exist at $backupsDir" -ForegroundColor Red
 }

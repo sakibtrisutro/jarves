@@ -3,7 +3,7 @@
     JARVIS Automated Windows Installation Script
 .DESCRIPTION
     Installs and configures JARVIS on Windows 10/11.
-    Verifies Node.js 18+, installs dependencies, initializes SQLite WAL database, builds the production app, and creates shortcuts.
+    Verifies Node.js 18+, installs dependencies, initializes SQLite WAL database, builds the production app, and creates desktop shortcuts.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -18,16 +18,16 @@ Write-Host ""
 Write-Host "[1/7] Checking Node.js runtime..." -ForegroundColor Yellow
 try {
     $nodeVersion = node -v
-    Write-Host "  ✓ Found Node.js: $nodeVersion" -ForegroundColor Green
+    Write-Host "  [OK] Found Node.js: $nodeVersion" -ForegroundColor Green
     
     $majorVersion = [int]($nodeVersion -replace 'v(\d+)\..*', '$1')
     if ($majorVersion -lt 18) {
-        Write-Host "  ❌ Node.js version 18 or higher is required. Found: $nodeVersion" -ForegroundColor Red
+        Write-Host "  [ERROR] Node.js version 18 or higher is required. Found: $nodeVersion" -ForegroundColor Red
         Write-Host "  Please download and install Node.js LTS from: https://nodejs.org/" -ForegroundColor Yellow
         Exit 1
     }
 } catch {
-    Write-Host "  ❌ Node.js is NOT installed on this machine!" -ForegroundColor Red
+    Write-Host "  [ERROR] Node.js is NOT installed on this machine!" -ForegroundColor Red
     Write-Host "  Please download and install Node.js 20+ LTS from: https://nodejs.org/" -ForegroundColor Yellow
     Exit 1
 }
@@ -36,9 +36,9 @@ try {
 Write-Host "[2/7] Checking npm package manager..." -ForegroundColor Yellow
 try {
     $npmVersion = npm -v
-    Write-Host "  ✓ Found npm: $npmVersion" -ForegroundColor Green
+    Write-Host "  [OK] Found npm: $npmVersion" -ForegroundColor Green
 } catch {
-    Write-Host "  ❌ npm package manager is not available." -ForegroundColor Red
+    Write-Host "  [ERROR] npm package manager is not available." -ForegroundColor Red
     Exit 1
 }
 
@@ -52,7 +52,7 @@ $backupsDir = Join-Path $projectRoot "backups"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $backupsDir | Out-Null
-Write-Host "  ✓ Directories verified." -ForegroundColor Green
+Write-Host "  [OK] Directories verified." -ForegroundColor Green
 
 # 4. Environment configuration
 Write-Host "[4/7] Verifying environment configuration (.env)..." -ForegroundColor Yellow
@@ -62,14 +62,14 @@ $envExamplePath = Join-Path $projectRoot ".env.example"
 if (-not (Test-Path $envPath)) {
     if (Test-Path $envExamplePath) {
         Copy-Item $envExamplePath $envPath
-        Write-Host "  ✓ Created .env from template." -ForegroundColor Green
-        Write-Host "  👉 Note: Open Settings in the web app to save your API key when ready." -ForegroundColor Cyan
+        Write-Host "  [OK] Created .env from template." -ForegroundColor Green
+        Write-Host "  [INFO] Note: Open Settings in the web app to save your API key when ready." -ForegroundColor Cyan
     } else {
-        Set-Content -Path $envPath -Value "PORT=3000`nNODE_ENV=production`nSQLITE_DB_PATH=./data/jarvis_operational.db`n"
-        Write-Host "  ✓ Created default .env." -ForegroundColor Green
+        @("PORT=3000", "NODE_ENV=production", "SQLITE_DB_PATH=./data/jarvis_operational.db") | Set-Content -Path $envPath
+        Write-Host "  [OK] Created default .env." -ForegroundColor Green
     }
 } else {
-    Write-Host "  ✓ Existing .env preserved (no overwrite)." -ForegroundColor Green
+    Write-Host "  [OK] Existing .env preserved (no overwrite)." -ForegroundColor Green
 }
 
 # 5. Install dependencies
@@ -83,7 +83,7 @@ if (Test-Path (Join-Path $projectRoot "package-lock.json")) {
     if ($LASTEXITCODE -eq 0) {
         $installSuccess = $true
     } else {
-        Write-Host "  ⚠️ 'npm ci' failed. Retrying with 'npm install'..." -ForegroundColor Yellow
+        Write-Host "  [WARNING] 'npm ci' failed. Retrying with 'npm install'..." -ForegroundColor Yellow
     }
 }
 
@@ -91,22 +91,22 @@ if (-not $installSuccess) {
     Write-Host "  Running 'npm install'..." -ForegroundColor Gray
     npm install --loglevel=error
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ❌ npm dependency installation failed with exit code $LASTEXITCODE." -ForegroundColor Red
+        Write-Host "  [ERROR] npm dependency installation failed with exit code $LASTEXITCODE." -ForegroundColor Red
         Write-Host "  Installation aborted." -ForegroundColor Red
         Exit 1
     }
 }
-Write-Host "  ✓ Dependencies installed successfully." -ForegroundColor Green
+Write-Host "  [OK] Dependencies installed successfully." -ForegroundColor Green
 
 # 6. Build production application
 Write-Host "[6/7] Building production application..." -ForegroundColor Yellow
 npm run build
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  ❌ Production build failed with exit code $LASTEXITCODE." -ForegroundColor Red
+    Write-Host "  [ERROR] Production build failed with exit code $LASTEXITCODE." -ForegroundColor Red
     Write-Host "  Installation aborted." -ForegroundColor Red
     Exit 1
 }
-Write-Host "  ✓ Production build complete." -ForegroundColor Green
+Write-Host "  [OK] Production build complete." -ForegroundColor Green
 
 # 7. Create Windows Desktop Shortcut (Optional)
 Write-Host "[7/7] Creating Desktop launcher shortcut..." -ForegroundColor Yellow
@@ -119,9 +119,9 @@ try {
     $shortcut.WorkingDirectory = $projectRoot
     $shortcut.Description = "Launch JARVIS Autonomous AI Assistant"
     $shortcut.Save()
-    Write-Host "  ✓ Desktop shortcut 'Start JARVIS' created!" -ForegroundColor Green
+    Write-Host "  [OK] Desktop shortcut 'Start JARVIS' created!" -ForegroundColor Green
 } catch {
-    Write-Host "  ℹ️ Skipping desktop shortcut creation." -ForegroundColor Gray
+    Write-Host "  [INFO] Skipping desktop shortcut creation." -ForegroundColor Gray
 }
 
 Write-Host ""

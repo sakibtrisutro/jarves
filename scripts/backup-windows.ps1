@@ -15,7 +15,7 @@ if (Test-Path $dbPath) {
     $timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
     $backupTarget = Join-Path $backupsDir "jarvis_backup_$timestamp.db"
     Copy-Item $dbPath $backupTarget
-    Write-Host "✓ SQLite Database backed up to: $backupTarget" -ForegroundColor Green
+    Write-Host "  [OK] SQLite Database backed up to: $backupTarget" -ForegroundColor Green
 } else {
-    Write-Host "⚠️ No database found at $dbPath to backup." -ForegroundColor Yellow
+    Write-Host "  [WARNING] No database found at $dbPath to backup." -ForegroundColor Yellow
 }

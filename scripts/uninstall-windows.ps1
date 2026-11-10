@@ -11,7 +11,7 @@ Write-Host "JARVIS Uninstallation Procedure" -ForegroundColor Yellow
 
 if (Test-Path $shortcutPath) {
     Remove-Item $shortcutPath -Force
-    Write-Host "✓ Desktop shortcut removed." -ForegroundColor Green
+    Write-Host "  [OK] Desktop shortcut removed." -ForegroundColor Green
 }
 
 Write-Host "Notice: Operational data in ./data and backups in ./backups were PRESERVED for safety." -ForegroundColor Cyan
