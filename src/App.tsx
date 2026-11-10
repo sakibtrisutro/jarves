@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, Volume2, Sparkles, Activity, Settings as SettingsIcon, LogOut, ShieldCheck, Zap } from 'lucide-react';
+import { Bot, Send, Volume2, VolumeX, Loader2, Sparkles, Activity, Settings as SettingsIcon, LogOut, ShieldCheck, Zap } from 'lucide-react';
 import { AuthScreen } from './components/AuthScreen.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { DiagnosticsModal } from './components/DiagnosticsModal.tsx';
@@ -18,6 +18,14 @@ interface UserSession {
   username: string;
   role: string;
   voicePersonality: string;
+}
+
+interface PlaybackSession {
+  sessionId: string;
+  messageId: string;
+  abortController?: AbortController;
+  audioElement?: HTMLAudioElement;
+  status: 'IDLE' | 'PREPARING' | 'SPEAKING' | 'STOPPED' | 'ERROR';
 }
 
 export default function App() {
@@ -39,7 +47,10 @@ export default function App() {
 
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [autoReadAloud, setAutoReadAloud] = useState(true);
-  const [activeSpeakingId, setActiveSpeakingId] = useState<string | null>(null);
+  
+  // Audio Playback Session Management
+  const activeSessionRef = useRef<PlaybackSession | null>(null);
+  const [playbackStateMap, setPlaybackStateMap] = useState<Record<string, 'IDLE' | 'PREPARING' | 'SPEAKING' | 'STOPPED' | 'ERROR'>>({});
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -88,23 +99,168 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isProcessing]);
 
-  const speakText = (text: string, messageId?: string) => {
+  /**
+   * Immediately stops all active audio playback, cancels TTS requests, and tears down session
+   */
+  const stopAllPlayback = (targetMessageId?: string) => {
+    const current = activeSessionRef.current;
+
+    // 1. Cancel browser SpeechSynthesis
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
+
+    if (current) {
+      // 2. Abort active network request
+      if (current.abortController) {
+        try { current.abortController.abort(); } catch {}
+      }
+
+      // 3. Stop HTML5 Audio if active
+      if (current.audioElement) {
+        try {
+          current.audioElement.pause();
+          current.audioElement.currentTime = 0;
+          current.audioElement.src = '';
+        } catch {}
+      }
+
+      current.status = 'STOPPED';
+
+      const msgId = targetMessageId || current.messageId;
+      setPlaybackStateMap((prev) => ({
+        ...prev,
+        [msgId]: 'STOPPED',
+      }));
+    }
+
+    activeSessionRef.current = null;
+  };
+
+  /**
+   * Toggle Read Aloud for a specific message with session token & instant stop
+   */
+  const handleToggleReadAloud = async (messageId: string, content: string) => {
     if (isSpeakerMuted) return;
-    if (!('speechSynthesis' in window)) return;
+    const currentState = playbackStateMap[messageId] || 'IDLE';
 
-    window.speechSynthesis.cancel();
-    if (messageId) setActiveSpeakingId(messageId);
+    // IF currently PREPARING or SPEAKING: Instantly STOP!
+    if (currentState === 'PREPARING' || currentState === 'SPEAKING') {
+      stopAllPlayback(messageId);
+      return;
+    }
 
-    const cleanSpeech = text.replace(/[*_#`~[\]]/g, '').replace(/\n+/g, '. ').trim();
+    // Stop any running playback on other messages first
+    stopAllPlayback();
+
+    const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const abortController = new AbortController();
+
+    const session: PlaybackSession = {
+      sessionId: newSessionId,
+      messageId,
+      abortController,
+      status: 'PREPARING',
+    };
+
+    activeSessionRef.current = session;
+    setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'PREPARING' }));
+
+    const cleanSpeech = content.replace(/[*_#`~[\]]/g, '').replace(/\n+/g, '. ').trim();
     const isBangla = /[\u0980-\u09FF]/.test(cleanSpeech) || language === 'bn';
-    const utterance = new SpeechSynthesisUtterance(cleanSpeech);
-    utterance.lang = isBangla ? 'bn-BD' : 'en-US';
-    utterance.rate = currentUser?.voicePersonality === 'Female' ? 1.05 : 0.95;
 
-    utterance.onend = () => setActiveSpeakingId(null);
-    utterance.onerror = () => setActiveSpeakingId(null);
+    // 1. Web Speech API playback
+    if ('speechSynthesis' in window) {
+      if (activeSessionRef.current?.sessionId !== newSessionId || activeSessionRef.current?.status === 'STOPPED') {
+        return;
+      }
 
-    window.speechSynthesis.speak(utterance);
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+        utterance.lang = isBangla ? 'bn-BD' : 'en-US';
+        utterance.rate = currentUser?.voicePersonality === 'Female' ? 1.05 : 0.95;
+
+        utterance.onstart = () => {
+          if (activeSessionRef.current?.sessionId === newSessionId && activeSessionRef.current?.status !== 'STOPPED') {
+            activeSessionRef.current.status = 'SPEAKING';
+            setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'SPEAKING' }));
+          }
+        };
+
+        utterance.onend = () => {
+          if (activeSessionRef.current?.sessionId === newSessionId) {
+            activeSessionRef.current = null;
+            setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'IDLE' }));
+          }
+        };
+
+        utterance.onerror = () => {
+          if (activeSessionRef.current?.sessionId === newSessionId) {
+            activeSessionRef.current = null;
+            setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'IDLE' }));
+          }
+        };
+
+        session.status = 'SPEAKING';
+        setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'SPEAKING' }));
+        window.speechSynthesis.speak(utterance);
+        return;
+      } catch {
+        // Fall through to API TTS fallback
+      }
+    }
+
+    // 2. API TTS Fallback
+    try {
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanSpeech, voiceName: currentUser?.voicePersonality === 'Female' ? 'Aoede' : 'Puck' }),
+        signal: abortController.signal,
+      });
+
+      if (activeSessionRef.current?.sessionId !== newSessionId || activeSessionRef.current?.status === 'STOPPED') {
+        return;
+      }
+
+      if (!res.ok) throw new Error('TTS API failed');
+
+      const data = await res.json();
+      if (data.audioBase64) {
+        const audio = new Audio(`data:${data.audioFormat || 'audio/mp3'};base64,${data.audioBase64}`);
+        session.audioElement = audio;
+
+        audio.onplay = () => {
+          if (activeSessionRef.current?.sessionId === newSessionId && activeSessionRef.current?.status !== 'STOPPED') {
+            activeSessionRef.current.status = 'SPEAKING';
+            setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'SPEAKING' }));
+          }
+        };
+
+        audio.onended = () => {
+          if (activeSessionRef.current?.sessionId === newSessionId) {
+            activeSessionRef.current = null;
+            setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'IDLE' }));
+          }
+        };
+
+        audio.onerror = () => {
+          if (activeSessionRef.current?.sessionId === newSessionId) {
+            activeSessionRef.current = null;
+            setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'ERROR' }));
+          }
+        };
+
+        await audio.play();
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      if (activeSessionRef.current?.sessionId === newSessionId) {
+        activeSessionRef.current = null;
+        setPlaybackStateMap((prev) => ({ ...prev, [messageId]: 'ERROR' }));
+      }
+    }
   };
 
   const handleSendMessage = async (textToSend?: string) => {
@@ -152,7 +308,7 @@ export default function App() {
       setMessages((prev) => [...prev, assistantMessage]);
 
       if (autoReadAloud && !isSpeakerMuted) {
-        speakText(data.text, asstId);
+        handleToggleReadAloud(asstId, data.text);
       }
     } catch (err: any) {
       setMessages((prev) => [
@@ -259,7 +415,7 @@ export default function App() {
 
         {messages.map((msg) => {
           const isUser = msg.role === 'user';
-          const isSpeaking = activeSpeakingId === msg.id;
+          const playbackState = playbackStateMap[msg.id] || 'IDLE';
 
           return (
             <div key={msg.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} animate-in fade-in`}>
@@ -277,13 +433,42 @@ export default function App() {
                 {!isUser && (
                   <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
                     <button
-                      onClick={() => speakText(msg.content, msg.id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors ${
-                        isSpeaking ? 'bg-indigo-950 border-indigo-500 text-indigo-300 font-semibold' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                      onClick={() => handleToggleReadAloud(msg.id, msg.content)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
+                        playbackState === 'SPEAKING'
+                          ? 'bg-indigo-950 border-indigo-500 text-indigo-300 font-semibold'
+                          : playbackState === 'PREPARING'
+                          ? 'bg-cyan-950 border-cyan-500 text-cyan-300 font-semibold'
+                          : playbackState === 'STOPPED'
+                          ? 'bg-rose-950/60 border-rose-800 text-rose-400 font-semibold'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-slate-800'
                       }`}
+                      title={
+                        playbackState === 'SPEAKING' || playbackState === 'PREPARING'
+                          ? 'Click to Stop Read Aloud'
+                          : playbackState === 'STOPPED'
+                          ? 'Click to Restart Read Aloud'
+                          : 'Read Aloud'
+                      }
                     >
-                      <Volume2 className={`w-3.5 h-3.5 ${isSpeaking ? 'animate-bounce text-indigo-400' : ''}`} />
-                      {isSpeaking ? 'Speaking...' : 'Read Aloud'}
+                      {playbackState === 'PREPARING' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                      ) : playbackState === 'SPEAKING' ? (
+                        <Volume2 className="w-3.5 h-3.5 animate-bounce text-indigo-400" />
+                      ) : playbackState === 'STOPPED' ? (
+                        <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                      ) : (
+                        <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                      <span>
+                        {playbackState === 'PREPARING'
+                          ? 'Preparing...'
+                          : playbackState === 'SPEAKING'
+                          ? 'Speaking...'
+                          : playbackState === 'STOPPED'
+                          ? 'Stopped'
+                          : 'Read Aloud'}
+                      </span>
                     </button>
                   </div>
                 )}
