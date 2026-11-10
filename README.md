@@ -1,8 +1,8 @@
 # J.A.R.V.I.S. — Autonomous Executive AI Partner
-### TRISUTRO Virtual CEO & Multi-Agent Operating System
+### TRISUTRO Virtual CEO & Autonomous Model Intelligence OS
 
 **Authoritative Repository:** https://github.com/sakibtrisutro/jarves.git  
-**Version:** 2.0.0 (Voice Intelligence, Telegram Gateway & Live Diagnostics)  
+**Version:** 3.0.0 (Autonomous Model Intelligence Engine, Multi-User Assistants, Voice & Windows Local Production)  
 **Development Hub:** Google AI Studio  
 **Production Runtime:** Windows 10/11 Laptop / PC  
 
@@ -10,39 +10,33 @@
 
 ## 🌟 Overview
 
-JARVIS is a persistent executive AI partner and multi-agent operating system designed to manage business workflows, conduct research, execute code, and communicate naturally via voice and Telegram.
+JARVIS is a persistent, modular executive AI assistant platform. Version 3.0 introduces an independent **Autonomous Model Intelligence Engine** with OpenRouter free-model discovery, strict free-only policy enforcement, multi-user isolation (Sakib & Sanjida), robust microphone voice input/output, and local Windows production deployment.
 
-### Key Capabilities
-- 🎙️ **Full Voice Intelligence:** Real-time microphone Speech-to-Text (Bangla & English), natural AI speech synthesis, Push-to-Talk, and Barge-In conversation interruption.
-- 📱 **Telegram Remote Gateway:** 24/7 mobile access via Telegram bot (`/status`, `/task`, `/report`, `/logs`, `/voice`), 1-tap inline approvals, and whitelisted user security.
-- 🩺 **Live System Logs & Diagnostics Center:** Real-time Server-Sent Events (SSE) telemetry stream, sub-system health monitors, error correlation, stack traces, and automated troubleshooting guidance.
-- ⚙️ **Centralized Settings Menu:** Manage AI providers (Gemini, Groq, OpenRouter, Ollama), Voice options, Telegram tokens, and local runtime parameters.
-- 💾 **Tri-Layer Hybrid Memory:** Version-controlled Markdown docs (Git) + high-velocity ACID SQLite database (`data/jarvis_operational.db`) in WAL mode.
-- 🪟 **Portable One-Click Windows Deployment:** Ready-to-run PowerShell installer (`install-windows.ps1`), background service launcher, automated backup scripts, and desktop shortcut creator.
+### Key Features
+- 🧠 **Autonomous Model Intelligence Engine:** Dynamic model discovery via OpenRouter catalog, automatic task-based routing (coding, reasoning, multilingual), and strict Free-Only policy enforcement at the backend request level.
+- 👥 **Multi-User Personal Assistants:** Isolated accounts for **Sakib** (default male voice personality) and **Sanjida** (default female voice personality) with separate conversations, long-term memories, and preferences.
+- 🎙️ **Voice System:** Robust microphone permission handling, Speech-to-Text (Bangla & English), natural voice synthesis, Push-to-Talk, continuous conversation, and instant Stop Speaking (Barge-In).
+- 🩺 **Live System Logs & Diagnostics:** Real-time Server-Sent Events (SSE) log stream, sub-system health monitors, and automated actionable troubleshooting guidance.
+- 💾 **Tri-Layer Hybrid Memory & SQLite WAL:** Version-controlled Markdown docs (Git) + high-velocity ACID SQLite database (`data/jarvis_operational.db`) in Write-Ahead Logging mode.
+- 🪟 **Portable Windows Deployment:** Ready-to-run PowerShell installation scripts (`install.bat`, `start.bat`, `stop.bat`, `update.bat`, `backup.bat`), dependency manifest, and release ZIP packaging.
 
 ---
 
 ## 🚀 One-Click Windows Installation
 
 ### Step 1: Download & Extract
-Download the JARVIS ZIP release or clone the repository to your Windows PC:
+Download the JARVIS release ZIP or clone the repository to your Windows PC:
 ```powershell
 git clone https://github.com/sakibtrisutro/jarves.git
 cd jarves
 ```
 
-### Step 2: Run the Automated Installer
-Right-click `scripts\install-windows.ps1` and select **Run with PowerShell**, or in terminal:
+### Step 2: Run the Installer
+Run `install.bat` or in Windows PowerShell:
 ```powershell
 .\scripts\install-windows.ps1
 ```
-The installer automatically:
-1. Detects Node.js 20+ and npm.
-2. Creates required runtime directories (`data/`, `logs/`, `backups/`).
-3. Generates your local `.env` configuration file safely without overwriting existing secrets.
-4. Installs all project dependencies.
-5. Builds the production client.
-6. Creates a **"Start JARVIS"** shortcut on your Windows Desktop!
+The installer automatically verifies Node.js 20+, creates runtime directories (`data/`, `logs/`, `backups/`), installs dependencies, builds the application, and creates a **"Start JARVIS"** shortcut on your Desktop.
 
 ---
 
@@ -52,67 +46,29 @@ The installer automatically:
   ```powershell
   .\scripts\start-windows.ps1
   ```
-  *(Or double-click the **Start JARVIS** desktop shortcut. Your browser opens to `http://localhost:3000`)*
-
 - **Stop JARVIS:**
   ```powershell
   .\scripts\stop-windows.ps1
   ```
-
-- **Run Diagnostics Health Check:**
-  ```powershell
-  .\scripts\health-check.ps1
-  ```
-
-- **Update JARVIS (Preserving your settings and SQLite database):**
-  ```powershell
-  .\scripts\update-windows.ps1
-  ```
-
-- **Create a Manual Database Backup:**
+- **Backup Operational Database:**
   ```powershell
   .\scripts\backup-windows.ps1
   ```
 
 ---
 
-## 🔧 Environment Configuration (`.env`)
+## 👥 Default Test Credentials
 
-```ini
-# Core Configuration
-PORT=3000
-NODE_ENV=production
-SQLITE_DB_PATH=./data/jarvis_operational.db
-
-# AI Provider Credentials (Google Gemini)
-GEMINI_API_KEY="your_gemini_api_key_here"
-
-# Telegram Bot Interface
-TELEGRAM_BOT_TOKEN="your_telegram_bot_token_here"
-ALLOWED_TELEGRAM_USER_IDS="your_telegram_numeric_id"
-```
+When you first launch JARVIS, log in with either test account (initial temporary password is `1234`):
+- **User 1:** `Sakib` (Password: `1234`, Voice: Male)
+- **User 2:** `Sanjida` (Password: `1234`, Voice: Female)
+*(You will be prompted to change your temporary password upon first login).*
 
 ---
 
 ## 🧪 Automated Verification Suite
 
-To run all automated verification tests:
+Run all verification tests:
 ```bash
 npm test
 ```
-All 14 tests verify sensitive data redaction, SQLite WAL integrity, Bangla & English voice logic, Telegram security whitelist, and AI connection diagnostics.
-
----
-
-## 📜 Documentation Directory
-- `docs/MASTER_BLUEPRINT.md` — Authoritative Canonical Master Blueprint v2.0
-- `docs/SYSTEM_ARCHITECTURE.md` — Topology, SQLite schemas, event bus
-- `docs/DEVELOPMENT_ROADMAP.md` — Phased roadmap (Phases 0–10)
-- `docs/AI_PROVIDER_STRATEGY.md` — Multi-provider routing, fallback chains
-- `docs/SECURITY_POLICY.md` — Two-tier autonomy matrix & approval gates
-- `docs/AGENT_SPECIFICATION.md` — Contracts for 10 specialized agents
-- `docs/TELEGRAM_GATEWAY.md` — Remote command & approval protocols
-- `docs/RUNTIME_DEPLOYMENT.md` — Windows service & PM2 setup
-- `docs/KNOWLEDGE_PRESERVATION.md` — Tri-layer hybrid memory protocols
-- `docs/DECISIONS.md` — Immutable decision log (DEC-001 through DEC-022)
-- `docs/PROGRESS.md` — Phased progress tracker

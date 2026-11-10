@@ -1,19 +1,149 @@
 import { Router, Request, Response } from 'express';
 import { logEvent, queryLogs, clearLogs, registerSseClient } from './logger.ts';
 import { generateJarvisResponse, transcribeAudioWithGemini, synthesizeSpeechWithGemini, testAiProviderConnection } from './gemini.ts';
-import { getTelegramConfig, updateTelegramConfig, testTelegramConnection } from './telegram.ts';
+import { fetchOpenRouterModels } from './model_registry.ts';
+import { getUserMemories, saveUserMemory, deleteUserMemory } from './memory.ts';
+import { hashPassword, verifyPassword } from './auth.ts';
 import { getDb } from './database.ts';
 
 export const apiRouter = Router();
 
 // -------------------------------------------------------------
-// 1. HEALTH & DIAGNOSTICS OVERVIEW
+// 1. AUTHENTICATION & MULTI-USER ENDPOINTS
+// -------------------------------------------------------------
+apiRouter.post('/auth/login', (req: Request, res: Response) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
+
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      logEvent({
+        level: 'WARNING',
+        category: 'SECURITY',
+        component: 'AuthManager',
+        message: `Failed login attempt for username "${username}"`,
+        error_code: 'INVALID_CREDENTIALS',
+      });
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    logEvent({
+      level: 'INFO',
+      category: 'SECURITY',
+      component: 'AuthManager',
+      message: `User "${username}" logged in successfully.`,
+    });
+
+    res.json({
+      success: true,
+      user: {
+        username: user.username,
+        role: user.role,
+        voicePersonality: user.voice_personality,
+        mustChangePassword: user.must_change_password === 1,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/auth/change-password', (req: Request, res: Response) => {
+  const { username, newPassword } = req.body;
+  if (!username || !newPassword || newPassword.length < 4) {
+    return res.status(400).json({ error: 'Invalid username or password format (min 4 chars).' });
+  }
+
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+  try {
+    const newHash = hashPassword(newPassword);
+    db.prepare(`
+      UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now')
+      WHERE username = ?
+    `).run(newHash, username);
+
+    logEvent({
+      level: 'INFO',
+      category: 'SECURITY',
+      component: 'AuthManager',
+      message: `Password changed successfully for user "${username}"`,
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 2. MODEL INTELLIGENCE & OPENROUTER ENDPOINTS
+// -------------------------------------------------------------
+apiRouter.get('/models', (req: Request, res: Response) => {
+  const db = getDb();
+  if (!db) return res.json({ models: [] });
+
+  try {
+    const models = db.prepare('SELECT * FROM model_registry ORDER BY is_free DESC, reasoning_score DESC').all();
+    res.json({ models });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/models/sync-openrouter', async (req: Request, res: Response) => {
+  const { apiKey } = req.body;
+  if (!apiKey) {
+    return res.status(400).json({ error: 'OpenRouter API Key required for catalog sync.' });
+  }
+
+  try {
+    const count = await fetchOpenRouterModels(apiKey);
+    res.json({ success: true, syncedCount: count });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 3. PERSISTENT MEMORY ENDPOINTS
+// -------------------------------------------------------------
+apiRouter.get('/memory', (req: Request, res: Response) => {
+  const username = (req.query.username as string) || 'Sakib';
+  const category = req.query.category as string;
+  const memories = getUserMemories(username, category);
+  res.json({ memories });
+});
+
+apiRouter.post('/memory', (req: Request, res: Response) => {
+  const { username, category, key, content } = req.body;
+  if (!username || !key || !content) {
+    return res.status(400).json({ error: 'Missing required memory parameters.' });
+  }
+  saveUserMemory(username, category || 'preference', key, content);
+  res.json({ success: true });
+});
+
+apiRouter.delete('/memory/:id', (req: Request, res: Response) => {
+  const { username } = req.body;
+  const success = deleteUserMemory(username || 'Sakib', req.params.id);
+  res.json({ success });
+});
+
+// -------------------------------------------------------------
+// 4. HEALTH & DIAGNOSTICS ENDPOINTS
 // -------------------------------------------------------------
 apiRouter.get('/health', (req: Request, res: Response) => {
   const db = getDb();
   let dbStatus = 'DISCONNECTED';
   let totalEvents = 0;
-  let activeTasksCount = 0;
 
   try {
     if (db) {
@@ -21,14 +151,10 @@ apiRouter.get('/health', (req: Request, res: Response) => {
       if (row?.ok === 1) dbStatus = 'HEALTHY';
       const evRow = db.prepare('SELECT COUNT(*) as count FROM system_events').get() as any;
       totalEvents = evRow?.count || 0;
-      const tRow = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'running' OR status = 'pending'").get() as any;
-      activeTasksCount = tRow?.count || 0;
     }
   } catch {
     dbStatus = 'ERROR';
   }
-
-  const telegramConfig = getTelegramConfig();
 
   res.json({
     status: 'healthy',
@@ -38,18 +164,14 @@ apiRouter.get('/health', (req: Request, res: Response) => {
       backend: 'HEALTHY',
       database: dbStatus,
       ai_provider: process.env.GEMINI_API_KEY ? 'CONFIGURED' : 'UNCONFIGURED',
-      telegram_bot: telegramConfig.enabled ? 'ACTIVE' : 'STANDBY',
+      model_intelligence: 'ACTIVE',
       voice_engine: 'READY',
       active_agents: 10,
-      active_tasks: activeTasksCount,
       total_diagnostic_events: totalEvents,
     },
   });
 });
 
-// -------------------------------------------------------------
-// 2. LIVE SYSTEM LOGS & DIAGNOSTICS ENDPOINTS
-// -------------------------------------------------------------
 apiRouter.get('/logs', (req: Request, res: Response) => {
   const { category, level, search, limit, offset } = req.query;
   const result = queryLogs({
@@ -68,93 +190,68 @@ apiRouter.get('/logs/stream', (req: Request, res: Response) => {
 
 apiRouter.post('/logs/clear', (req: Request, res: Response) => {
   const ok = clearLogs();
-  logEvent({
-    level: 'INFO',
-    category: 'SYSTEM',
-    component: 'DiagnosticsCenter',
-    message: 'User initiated log purge. Event logs cleared.',
-  });
   res.json({ success: ok });
 });
 
-apiRouter.get('/logs/export', (req: Request, res: Response) => {
-  const result = queryLogs({ limit: 1000 });
-  res.setHeader('Content-Disposition', `attachment; filename="jarvis_diagnostics_${Date.now()}.json"`);
-  res.setHeader('Content-Type', 'application/json');
-  res.send(JSON.stringify(result.events, null, 2));
-});
-
 // -------------------------------------------------------------
-// 3. VOICE INTERACTION ENDPOINTS
+// 5. VOICE & CHAT ENDPOINTS
 // -------------------------------------------------------------
 apiRouter.post('/voice/transcribe', async (req: Request, res: Response) => {
   const { audioBase64, mimeType } = req.body;
-  if (!audioBase64) {
-    return res.status(400).json({ error: 'Missing audioBase64 in request payload.' });
-  }
-
   try {
-    const transcript = await transcribeAudioWithGemini(audioBase64, mimeType || 'audio/webm');
+    const transcript = await transcribeAudioWithGemini(audioBase64, mimeType);
     res.json({ transcript });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Audio transcription failed' });
+    res.status(500).json({ error: err.message });
   }
 });
 
 apiRouter.post('/voice/tts', async (req: Request, res: Response) => {
   const { text, voiceName } = req.body;
-  if (!text) {
-    return res.status(400).json({ error: 'Missing text in request payload.' });
-  }
-
   try {
     const result = await synthesizeSpeechWithGemini(text, voiceName || 'Puck');
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'TTS synthesis failed' });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// -------------------------------------------------------------
-// 4. CONVERSATIONAL CHAT ENDPOINTS
-// -------------------------------------------------------------
 apiRouter.post('/chat', async (req: Request, res: Response) => {
-  const { message, conversationId, history, language, voiceMode } = req.body;
-  if (!message) {
-    return res.status(400).json({ error: 'Missing message parameter.' });
-  }
+  const { message, conversationId, history, username, language, voiceMode, provider, apiKey, freeOnly, naturalInstructions } = req.body;
+  if (!message) return res.status(400).json({ error: 'Missing message parameter.' });
 
   const convId = conversationId || `conv_${Date.now()}`;
+  const currentUser = username || 'Sakib';
 
   try {
     const db = getDb();
-
-    // Ensure conversation exists
     if (db) {
       db.prepare(`
         INSERT OR IGNORE INTO conversations (id, title, created_at, updated_at)
-        VALUES (?, ?, ?, ?)
-      `).run(convId, message.substring(0, 30), new Date().toISOString(), new Date().toISOString());
+        VALUES (?, ?, datetime('now'), datetime('now'))
+      `).run(convId, message.substring(0, 30));
 
-      // Save user message
       db.prepare(`
         INSERT INTO messages (id, conversation_id, role, content, created_at)
-        VALUES (?, ?, 'user', ?, ?)
-      `).run(`msg_${Date.now()}`, convId, message, new Date().toISOString());
+        VALUES (?, ?, 'user', ?, datetime('now'))
+      `).run(`msg_${Date.now()}`, convId, message);
     }
 
-    // Generate AI response
     const aiResponse = await generateJarvisResponse(message, history || [], {
+      username: currentUser,
       language: language || 'en',
       voiceMode: Boolean(voiceMode),
+      provider,
+      apiKey,
+      freeOnly: freeOnly !== undefined ? freeOnly : true,
+      naturalInstructions,
     });
 
-    // Save assistant message
     if (db) {
       db.prepare(`
         INSERT INTO messages (id, conversation_id, role, content, created_at)
-        VALUES (?, ?, 'assistant', ?, ?)
-      `).run(`msg_${Date.now() + 1}`, convId, aiResponse.text, new Date().toISOString());
+        VALUES (?, ?, 'assistant', ?, datetime('now'))
+      `).run(`msg_${Date.now() + 1}`, convId, aiResponse.text);
     }
 
     res.json({
@@ -171,91 +268,46 @@ apiRouter.post('/chat', async (req: Request, res: Response) => {
 apiRouter.get('/conversations/:id/messages', (req: Request, res: Response) => {
   const db = getDb();
   if (!db) return res.json({ messages: [] });
-
-  try {
-    const messages = db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC').all(req.params.id);
-    res.json({ messages });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const messages = db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC').all(req.params.id);
+  res.json({ messages });
 });
 
 // -------------------------------------------------------------
-// 5. SETTINGS & INTEGRATIONS ENDPOINTS
+// 6. SETTINGS & INTELLIGENCE CONFIG ENDPOINTS
 // -------------------------------------------------------------
 apiRouter.get('/settings', (req: Request, res: Response) => {
   const db = getDb();
   const settingsObj: Record<string, any> = {
-    general: {
-      appName: 'JARVIS Virtual CEO',
-      language: 'en',
-      defaultMode: 'voice',
-      theme: 'dark',
-      soundEnabled: true,
-      autoReadAloud: true,
-    },
-    ai: {
-      defaultProvider: 'gemini',
-      geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
-      selectedModel: 'gemini-3.8-flash',
-      groqKeyConfigured: Boolean(process.env.GROQ_API_KEY),
-      openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
-      ollamaUrl: 'http://localhost:11434',
-    },
-    voice: {
-      voiceInputEnabled: true,
-      voiceOutputEnabled: true,
-      continuousMode: true,
-      pushToTalk: false,
-      speechSpeed: 1.0,
-      speechVolume: 1.0,
-      language: 'en-US',
-      preferredVoice: 'default',
-    },
-    telegram: getTelegramConfig(),
+    general: { appName: 'JARVIS Virtual CEO', language: 'en', theme: 'dark', autoReadAloud: true },
+    ai: { defaultProvider: 'gemini', freeOnly: true, selectedModel: 'gemini-3.8-flash', naturalInstructions: 'Always prioritize free models.' },
+    voice: { voiceInputEnabled: true, voiceOutputEnabled: true, continuousMode: true, speechSpeed: 1.0, speechVolume: 1.0 },
   };
 
   if (db) {
     try {
       const rows = db.prepare('SELECT key, value_json FROM settings').all() as any[];
       for (const r of rows) {
-        try {
-          settingsObj[r.key] = JSON.parse(r.value_json);
-        } catch {}
+        try { settingsObj[r.key] = JSON.parse(r.value_json); } catch {}
       }
     } catch {}
   }
-
   res.json(settingsObj);
 });
 
 apiRouter.post('/settings', (req: Request, res: Response) => {
   const db = getDb();
   const { category, values } = req.body;
-
-  if (category === 'telegram' && values) {
-    updateTelegramConfig(values);
-  }
-
   if (db && category && values) {
     try {
       db.prepare(`
         INSERT INTO settings (key, value_json, updated_at)
-        VALUES (?, ?, ?)
+        VALUES (?, ?, datetime('now'))
         ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at
-      `).run(category, JSON.stringify(values), new Date().toISOString());
+      `).run(category, JSON.stringify(values));
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   }
-
-  logEvent({
-    level: 'INFO',
-    category: 'SYSTEM',
-    component: 'SettingsManager',
-    message: `Updated settings category: "${category}"`,
-  });
-
   res.json({ success: true });
 });
 
@@ -263,64 +315,4 @@ apiRouter.post('/settings/test-ai', async (req: Request, res: Response) => {
   const { provider, apiKey } = req.body;
   const result = await testAiProviderConnection(provider || 'gemini', apiKey);
   res.json(result);
-});
-
-apiRouter.post('/settings/test-telegram', async (req: Request, res: Response) => {
-  const { botToken } = req.body;
-  const result = await testTelegramConnection(botToken);
-  res.json(result);
-});
-
-// -------------------------------------------------------------
-// 6. STRUCTURED TASKS & AGENT ENDPOINTS
-// -------------------------------------------------------------
-apiRouter.get('/tasks', (req: Request, res: Response) => {
-  const db = getDb();
-  if (!db) return res.json({ tasks: [] });
-
-  try {
-    const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 50').all();
-    res.json({ tasks });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-apiRouter.post('/tasks', (req: Request, res: Response) => {
-  const { title, description, priority, assigned_agent } = req.body;
-  if (!title) return res.status(400).json({ error: 'Title required' });
-
-  const db = getDb();
-  const taskId = `task_${Date.now()}`;
-
-  if (db) {
-    try {
-      db.prepare(`
-        INSERT INTO tasks (id, title, description, status, priority, assigned_agent, created_at, updated_at)
-        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
-      `).run(
-        taskId,
-        title,
-        description || '',
-        priority || 'normal',
-        assigned_agent || 'JARVIS_CORE',
-        new Date().toISOString(),
-        new Date().toISOString()
-      );
-
-      logEvent({
-        level: 'INFO',
-        category: 'TASK',
-        component: 'TaskManager',
-        message: `Task created: "${title}" (ID: ${taskId})`,
-        task_id: taskId,
-      });
-
-      return res.json({ id: taskId, success: true });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  }
-
-  res.json({ id: taskId, success: true });
 });
