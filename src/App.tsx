@@ -323,7 +323,7 @@ export default function App() {
             { id: 'assistant', icon: BrainCircuit, label: 'Assistant' },
             { id: 'conversations', icon: MessageSquare, label: 'Archives' },
             { id: 'tasks', icon: ListTodo, label: 'Task Center' },
-            { id: 'agents', icon: Zap, label: 'Agents' },
+            { id: 'agents', icon: Zap, label: 'Agents & Skills' },
             { id: 'memory', icon: Database, label: 'Memory' },
           ].map(item => (
             <button
