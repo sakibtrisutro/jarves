@@ -16,11 +16,11 @@ export interface ModelMetadata {
   success_rate: number;
   avg_latency_ms: number;
   last_verified_at: string;
+  eligibility: 'ELIGIBLE' | 'INELIGIBLE' | 'UNKNOWN';
 }
 
 /**
- * Initializes Model Registry table schema. Zero-configuration first boot leaves registry empty
- * until API keys are provided and discovery/bootstrap runs.
+ * Initializes Model Registry table schema.
  */
 export function initModelRegistry() {
   const db = getDb();
@@ -41,9 +41,15 @@ export function initModelRegistry() {
       multilingual_score REAL DEFAULT 0.8,
       success_rate REAL DEFAULT 1.0,
       avg_latency_ms REAL DEFAULT 350.0,
+      eligibility TEXT DEFAULT 'UNKNOWN',
+      priority INTEGER DEFAULT 0,
       last_verified_at TEXT NOT NULL
     );
   `);
+
+  // Migration for existing table
+  try { db.exec('ALTER TABLE model_registry ADD COLUMN eligibility TEXT DEFAULT "UNKNOWN"'); } catch {}
+  try { db.exec('ALTER TABLE model_registry ADD COLUMN priority INTEGER DEFAULT 0'); } catch {}
 }
 
 /**
@@ -52,7 +58,7 @@ export function initModelRegistry() {
 export async function fetchGeminiModels(apiKey: string): Promise<number> {
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -69,8 +75,8 @@ export async function fetchGeminiModels(apiKey: string): Promise<number> {
       INSERT OR REPLACE INTO model_registry (
         model_id, provider, display_name, is_free, input_cost_per_token, output_cost_per_token,
         context_window, supports_tools, reasoning_score, coding_score, multilingual_score,
-        success_rate, avg_latency_ms, last_verified_at
-      ) VALUES (?, 'gemini', ?, ?, ?, ?, ?, 1, 0.9, 0.88, 0.92, 0.99, 300, datetime('now'))
+        success_rate, avg_latency_ms, eligibility, last_verified_at
+      ) VALUES (?, 'gemini', ?, ?, ?, ?, ?, 1, 0.9, 0.88, 0.95, 0.99, 300, 'ELIGIBLE', datetime('now'))
     `);
 
     for (const m of rawModels) {
@@ -79,7 +85,8 @@ export async function fetchGeminiModels(apiKey: string): Promise<number> {
       const methods = m.supportedGenerationMethods || [];
       if (!methods.includes('generateContent')) continue;
 
-      const isFree = cleanId.includes('flash') || cleanId.includes('1.5') || cleanId.includes('2.0') || cleanId.includes('2.5');
+      // Deterministic free detection for Gemini
+      const isFree = cleanId.includes('flash') || cleanId.includes('1.5') || cleanId.includes('2.0') || cleanId.includes('lite');
       const inputCost = isFree ? 0.0 : 0.000001;
       const outputCost = isFree ? 0.0 : 0.000004;
       const contextWindow = m.inputTokenLimit || 1048576;
@@ -88,22 +95,9 @@ export async function fetchGeminiModels(apiKey: string): Promise<number> {
       count++;
     }
 
-    logEvent({
-      level: 'INFO',
-      category: 'API',
-      component: 'ModelIntelligenceEngine',
-      message: `Discovered ${count} models from Google Gemini catalog.`,
-    });
-
     return count;
   } catch (err: any) {
-    logEvent({
-      level: 'ERROR',
-      category: 'API',
-      component: 'ModelIntelligenceEngine',
-      message: `Gemini discovery failed: ${err.message}`,
-      error_code: 'GEMINI_DISCOVERY_FAILED',
-    });
+    console.error('Gemini discovery failed:', err);
     throw err;
   }
 }
@@ -115,7 +109,7 @@ export async function fetchOpenAiModels(apiKey: string): Promise<number> {
   try {
     const res = await fetch('https://api.openai.com/v1/models', {
       headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -132,8 +126,8 @@ export async function fetchOpenAiModels(apiKey: string): Promise<number> {
       INSERT OR REPLACE INTO model_registry (
         model_id, provider, display_name, is_free, input_cost_per_token, output_cost_per_token,
         context_window, supports_tools, reasoning_score, coding_score, multilingual_score,
-        success_rate, avg_latency_ms, last_verified_at
-      ) VALUES (?, 'openai', ?, 0, 0.0000025, 0.00001, 128000, 1, 0.95, 0.94, 0.92, 0.99, 450, datetime('now'))
+        success_rate, avg_latency_ms, eligibility, last_verified_at
+      ) VALUES (?, 'openai', ?, 0, 0.0000025, 0.00001, 128000, 1, 0.95, 0.95, 0.92, 0.99, 450, 'ELIGIBLE', datetime('now'))
     `);
 
     for (const m of rawModels) {
@@ -143,22 +137,9 @@ export async function fetchOpenAiModels(apiKey: string): Promise<number> {
       count++;
     }
 
-    logEvent({
-      level: 'INFO',
-      category: 'API',
-      component: 'ModelIntelligenceEngine',
-      message: `Discovered ${count} models from OpenAI catalog.`,
-    });
-
     return count;
   } catch (err: any) {
-    logEvent({
-      level: 'ERROR',
-      category: 'API',
-      component: 'ModelIntelligenceEngine',
-      message: `OpenAI discovery failed: ${err.message}`,
-      error_code: 'OPENAI_DISCOVERY_FAILED',
-    });
+    console.error('OpenAI discovery failed:', err);
     throw err;
   }
 }
@@ -174,7 +155,7 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<number> {
         'HTTP-Referer': 'https://jarvis.trisutro.bond',
         'X-Title': 'JARVIS Executive AI',
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(12000),
     });
 
     if (!res.ok) {
@@ -191,8 +172,8 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<number> {
       INSERT OR REPLACE INTO model_registry (
         model_id, provider, display_name, is_free, input_cost_per_token, output_cost_per_token,
         context_window, supports_tools, reasoning_score, coding_score, multilingual_score,
-        success_rate, avg_latency_ms, last_verified_at
-      ) VALUES (?, 'openrouter', ?, ?, ?, ?, ?, 1, 0.85, 0.85, 0.85, 0.98, 400, datetime('now'))
+        success_rate, avg_latency_ms, eligibility, last_verified_at
+      ) VALUES (?, 'openrouter', ?, ?, ?, ?, ?, 1, 0.85, 0.85, 0.85, 0.98, 450, 'ELIGIBLE', datetime('now'))
     `);
 
     for (const m of models) {
@@ -201,6 +182,8 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<number> {
       const pricing = m.pricing || {};
       const promptCost = parseFloat(pricing.prompt || '0');
       const completionCost = parseFloat(pricing.completion || '0');
+      
+      // Strict free detection for OpenRouter
       const isFree = promptCost === 0 && completionCost === 0 && (modelId.includes(':free') || name.toLowerCase().includes('free'));
 
       stmt.run(
@@ -214,45 +197,27 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<number> {
       count++;
     }
 
-    logEvent({
-      level: 'INFO',
-      category: 'API',
-      component: 'ModelIntelligenceEngine',
-      message: `Discovered ${count} models from OpenRouter catalog.`,
-    });
-
     return count;
   } catch (err: any) {
-    logEvent({
-      level: 'ERROR',
-      category: 'API',
-      component: 'ModelIntelligenceEngine',
-      message: `Failed to fetch OpenRouter model catalog: ${err.message}`,
-      error_code: 'OPENROUTER_DISCOVERY_FAILED',
-    });
+    console.error('OpenRouter discovery failed:', err);
     throw err;
   }
 }
 
 /**
- * Model Router with Task Scoring and Strict Free Policy
+ * Builds a priority pipeline of eligible models for a specific task.
  */
-export function selectBestModelForTask(
-  taskType: 'general' | 'coding' | 'reasoning' | 'multilingual',
-  freeOnly: boolean
-): { modelId: string; provider: string; reason: string } {
+export function getModelPipeline(taskType: string, freeOnly: boolean): any[] {
   const db = getDb();
-  if (!db) {
-    return { modelId: '', provider: '', reason: 'Database uninitialized' };
-  }
+  if (!db) return [];
 
-  let sql = 'SELECT * FROM model_registry WHERE 1=1';
-  const params: any[] = [];
-
+  let sql = "SELECT * FROM model_registry WHERE eligibility = 'ELIGIBLE'";
+  
   if (freeOnly) {
     sql += ' AND is_free = 1';
   }
 
+  // Task-aware sorting
   if (taskType === 'coding') {
     sql += ' ORDER BY coding_score DESC, avg_latency_ms ASC';
   } else if (taskType === 'reasoning') {
@@ -260,19 +225,42 @@ export function selectBestModelForTask(
   } else if (taskType === 'multilingual') {
     sql += ' ORDER BY multilingual_score DESC, avg_latency_ms ASC';
   } else {
-    sql += ' ORDER BY (reasoning_score + success_rate) DESC';
+    sql += ' ORDER BY (reasoning_score + success_rate) DESC, avg_latency_ms ASC';
   }
 
-  sql += ' LIMIT 1';
+  sql += ' LIMIT 5';
 
-  const best = db.prepare(sql).get(...params) as any;
-  if (best) {
-    return {
-      modelId: best.model_id,
-      provider: best.provider,
-      reason: `Selected model "${best.display_name}" for task "${taskType}" (Free Only: ${freeOnly}, Score: ${best.reasoning_score})`,
-    };
+  try {
+    return db.prepare(sql).all();
+  } catch (err) {
+    console.error('Failed to get model pipeline:', err);
+    return [];
   }
+}
 
-  return { modelId: '', provider: '', reason: 'No model found in registry matching criteria' };
+/**
+ * Updates model statistics after a request
+ */
+export function updateModelStats(modelId: string, success: boolean, latencyMs: number) {
+  const db = getDb();
+  if (!db) return;
+
+  try {
+    if (success) {
+      db.prepare(`
+        UPDATE model_registry 
+        SET success_rate = (success_rate * 0.9) + 0.1,
+            avg_latency_ms = (avg_latency_ms * 0.8) + (? * 0.2),
+            last_verified_at = datetime('now')
+        WHERE model_id = ?
+      `).run(latencyMs, modelId);
+    } else {
+      db.prepare(`
+        UPDATE model_registry 
+        SET success_rate = success_rate * 0.8,
+            last_verified_at = datetime('now')
+        WHERE model_id = ?
+      `).run(modelId);
+    }
+  } catch {}
 }

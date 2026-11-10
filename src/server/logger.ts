@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Response } from 'express';
 import { getDb } from './database.ts';
 
-export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL' | 'DEBUG';
 
 export type LogCategory = 
   | 'SYSTEM'
@@ -63,9 +63,10 @@ export function sanitizeData(data: any): any {
     return data
       .replace(/gho_[A-Za-z0-9_]{16,}/g, 'gho_***REDACTED***')
       .replace(/AIza[0-9A-Za-z-_]{35}/g, 'AIza***REDACTED***')
+      .replace(/sk-or-v1-[a-zA-Z0-9]{48,}/g, 'sk-or-v1-***REDACTED***')
+      .replace(/sk-[a-zA-Z0-9]{48,}/g, 'sk-***REDACTED***')
       .replace(/([0-9]{8,11}:[a-zA-Z0-9_-]{35})/g, '***TELEGRAM_TOKEN_REDACTED***')
-      .replace(/bearer\s+[A-Za-z0-9_.-]+/gi, 'Bearer ***REDACTED***')
-      .replace(/gsk_[A-Za-z0-9_]+/gi, 'gsk_***REDACTED***');
+      .replace(/bearer\s+[A-Za-z0-9_.-]+/gi, 'Bearer ***REDACTED***');
   }
   if (typeof data === 'object' && data !== null) {
     if (Array.isArray(data)) {

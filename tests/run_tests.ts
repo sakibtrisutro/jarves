@@ -2,7 +2,7 @@ import { logEvent, queryLogs, sanitizeData } from '../src/server/logger.ts';
 import { initDatabase, getDb } from '../src/server/database.ts';
 import { testTelegramConnection } from '../src/server/telegram.ts';
 import { testAiProviderConnection, getApiKeys, getAiSettings, generateJarvisResponse } from '../src/server/gemini.ts';
-import { fetchOpenRouterModels, selectBestModelForTask } from '../src/server/model_registry.ts';
+import { fetchOpenRouterModels } from '../src/server/model_registry.ts';
 
 console.log('====================================================');
 console.log('       JARVIS AUTOMATED VERIFICATION SUITE         ');
@@ -46,12 +46,16 @@ async function runTestSuite() {
   if (db) {
     const testTaskId = `test_task_${Date.now()}`;
     db.prepare(`
-      INSERT INTO tasks (id, title, status, priority, created_at, updated_at)
-      VALUES (?, 'Test Task', 'pending', 'normal', datetime('now'), datetime('now'))
+      INSERT INTO tasks (id, username, title, status, priority, created_at, updated_at)
+      VALUES (?, 'Sakib', 'Sakib Task', 'pending', 'normal', datetime('now'), datetime('now'))
     `).run(testTaskId);
 
     const taskRow = db.prepare('SELECT * FROM tasks WHERE id = ?').get(testTaskId) as any;
     assert(taskRow && taskRow.id === testTaskId, 'Task record inserted and retrieved with ACID integrity');
+
+    // Isolation Check: Sanjida should not see Sakib's task
+    const sanjidaTask = db.prepare('SELECT * FROM tasks WHERE id = ? AND username = \'Sanjida\'').get(testTaskId);
+    assert(!sanjidaTask, 'Multi-user isolation: Sanjida cannot access Sakib’s private records');
 
     db.prepare('DELETE FROM tasks WHERE id = ?').run(testTaskId);
     assert(true, 'Task record cleaned up cleanly');

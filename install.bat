@@ -1,7 +1,8 @@
 @echo off
 title JARVIS Installer
 echo Running JARVIS Windows Installation...
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\install-windows.ps1"
+set "SCRIPT_PATH=%~dp0scripts\install-windows.ps1"
+powershell -ExecutionPolicy Bypass -File "%SCRIPT_PATH%"
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo [ERROR] Installation aborted due to an error. Please check messages above.

@@ -77,23 +77,27 @@ function runMigrations(db: any) {
       updated_at TEXT NOT NULL
     );
 
-    -- 3. Conversations & Context History
+    -- 3. Conversations & Context History (Isolated by username)
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
+      username TEXT NOT NULL DEFAULT 'Sakib',
       title TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
+      username TEXT NOT NULL DEFAULT 'Sakib',
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       audio_url TEXT,
       metadata_json TEXT DEFAULT '{}',
       created_at TEXT NOT NULL,
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
     );
 
     -- 4. Centralized Settings Table (Key-Value)
@@ -106,6 +110,7 @@ function runMigrations(db: any) {
     -- 5. Tasks Table
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
+      username TEXT NOT NULL DEFAULT 'Sakib',
       title TEXT NOT NULL,
       description TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -113,7 +118,19 @@ function runMigrations(db: any) {
       assignee TEXT,
       due_date TEXT,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
     );
   `);
+
+  // Migration for existing tables to add username if missing
+  try {
+    db.exec('ALTER TABLE conversations ADD COLUMN username TEXT NOT NULL DEFAULT "Sakib"');
+  } catch {}
+  try {
+    db.exec('ALTER TABLE messages ADD COLUMN username TEXT NOT NULL DEFAULT "Sakib"');
+  } catch {}
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN username TEXT NOT NULL DEFAULT "Sakib"');
+  } catch {}
 }
