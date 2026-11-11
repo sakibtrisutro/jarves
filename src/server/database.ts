@@ -187,6 +187,20 @@ function runMigrations(db: any) {
       created_at TEXT NOT NULL,
       FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
     );
+
+    -- 11. Model Failover & Activity History
+    CREATE TABLE IF NOT EXISTS model_failover_history (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      previous_provider TEXT,
+      previous_model TEXT,
+      new_provider TEXT,
+      new_model TEXT,
+      failure_reason TEXT,
+      status TEXT NOT NULL,
+      switch_count INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Migrations for existing tables

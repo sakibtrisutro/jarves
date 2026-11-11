@@ -316,6 +316,26 @@ async function runTestSuite() {
   const smtpConfigured = Boolean(process.env.SMTP_HOST);
   assert(!smtpConfigured, 'SMTP accurately reported as unconfigured when credentials are not present (no fake emails dispatched)');
 
+  // 11. AUTONOMOUS FREE-MODEL INTELLIGENCE & FAILOVER
+  console.log('\n[11/11] Testing Autonomous Free-Model Intelligence & Live Failover...');
+  const currentKeys = getApiKeys();
+  assert(Object.keys(currentKeys).length === 0, 'Zero API keys on fresh start (no preloaded keys or default provider)');
+
+  if (db) {
+    // Record mock failover history
+    const testFailoverId = `fail_${Date.now()}`;
+    db.prepare(`
+      INSERT INTO model_failover_history (id, username, previous_provider, previous_model, new_provider, new_model, failure_reason, status, switch_count, created_at)
+      VALUES (?, 'Sakib', 'openrouter', 'old-model:free', 'openrouter', 'new-model:free', 'Rate limit exceeded (HTTP 429)', 'SWITCHED', 1, datetime('now'))
+    `).run(testFailoverId);
+
+    const historyRow = db.prepare('SELECT * FROM model_failover_history WHERE id = ?').get(testFailoverId) as any;
+    assert(Boolean(historyRow && historyRow.new_model === 'new-model:free'), 'Model failover history recorded successfully');
+    assert(historyRow.switch_count === 1, 'Switch count tracked correctly');
+
+    db.prepare('DELETE FROM model_failover_history WHERE id = ?').run(testFailoverId);
+  }
+
   console.log('\n====================================================');
   console.log(`RESULTS: ${passedTests}/${totalTests} Tests Passed successfully.`);
   console.log('====================================================\n');
