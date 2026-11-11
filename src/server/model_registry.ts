@@ -48,7 +48,7 @@ export function initModelRegistry() {
   `);
 
   // Migration for existing table
-  try { db.exec('ALTER TABLE model_registry ADD COLUMN eligibility TEXT DEFAULT "UNKNOWN"'); } catch {}
+  try { db.exec("ALTER TABLE model_registry ADD COLUMN eligibility TEXT DEFAULT 'UNKNOWN'"); } catch {}
   try { db.exec('ALTER TABLE model_registry ADD COLUMN priority INTEGER DEFAULT 0'); } catch {}
 }
 

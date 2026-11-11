@@ -7,9 +7,10 @@ import { logEvent } from './logger.ts';
  * Format: scrypt:<saltHex>:<derivedKeyHex>
  * Backward compatible with existing PBKDF2 hashes (salt:hash)
  */
-export function hashPassword(password: string): string {
+export function hashPassword(password: string | number): string {
+  const passStr = String(password != null ? password : '');
   const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(password, salt, 64, {
+  const derivedKey = crypto.scryptSync(passStr, salt, 64, {
     N: 16384,
     r: 8,
     p: 1,
@@ -18,16 +19,17 @@ export function hashPassword(password: string): string {
   return `scrypt:${salt}:${derivedKey}`;
 }
 
-export function verifyPassword(password: string, storedHash: string): boolean {
+export function verifyPassword(password: string | number, storedHash: string): boolean {
   try {
-    if (!storedHash) return false;
+    if (!storedHash || password == null) return false;
+    const passStr = String(password);
 
     // Modern scrypt format
     if (storedHash.startsWith('scrypt:')) {
       const parts = storedHash.split(':');
       if (parts.length !== 3) return false;
       const [, salt, originalKeyHex] = parts;
-      const derivedKey = crypto.scryptSync(password, salt, 64, {
+      const derivedKey = crypto.scryptSync(passStr, salt, 64, {
         N: 16384,
         r: 8,
         p: 1,
@@ -39,7 +41,7 @@ export function verifyPassword(password: string, storedHash: string): boolean {
     // Backward compatibility for legacy PBKDF2 hashes (salt:hash)
     const [salt, originalHash] = storedHash.split(':');
     if (!salt || !originalHash) return false;
-    const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+    const hash = crypto.pbkdf2Sync(passStr, salt, 10000, 64, 'sha512').toString('hex');
     return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex'));
   } catch {
     return false;
@@ -145,26 +147,40 @@ export function formatClearCookie(): string {
 }
 
 /**
- * Initializes default users Sakib & Sanjida if not present
+ * Initializes default users Sakib & Sanjida if not present,
+ * or verifies and restores the temporary password if must_change_password is 1.
  */
 export function initDefaultUsers() {
   const db = getDb();
   if (!db) return;
 
-  const users = [
+  const defaultUsers = [
     { username: 'Sakib', role: 'admin', voice: 'Male' },
     { username: 'Sanjida', role: 'user', voice: 'Female' },
   ];
 
-  for (const u of users) {
-    const existing = db.prepare('SELECT username FROM users WHERE username = ?').get(u.username);
-    if (!existing) {
-      const initialHash = hashPassword('1234');
-      db.prepare(`
-        INSERT INTO users (username, password_hash, role, voice_personality, must_change_password, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
-      `).run(u.username, initialHash, u.role, u.voice);
-      console.log(`[AUTH] Created default user account: ${u.username} (temp password initialized)`);
+  for (const u of defaultUsers) {
+    try {
+      const existing = db.prepare('SELECT username, password_hash, must_change_password FROM users WHERE LOWER(TRIM(username)) = LOWER(?)').get(u.username) as any;
+      if (!existing) {
+        const initialHash = hashPassword('1234');
+        db.prepare(`
+          INSERT INTO users (username, password_hash, role, voice_personality, must_change_password, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        `).run(u.username, initialHash, u.role, u.voice);
+        console.log(`[AUTH] Created default user account: ${u.username} (temp password initialized)`);
+      } else if (existing.must_change_password === 1) {
+        // If must_change_password is 1, verify that the hash verifies against '1234' and uses scrypt format
+        const isValid = verifyPassword('1234', existing.password_hash);
+        const isScrypt = existing.password_hash?.startsWith('scrypt:');
+        if (!isValid || !isScrypt) {
+          const freshHash = hashPassword('1234');
+          db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE LOWER(TRIM(username)) = LOWER(?)").run(freshHash, u.username);
+          console.log(`[AUTH] Upgraded/restored valid scrypt hash for default user: ${u.username} with temporary password`);
+        }
+      }
+    } catch (err) {
+      console.error(`[AUTH] Error initializing default user ${u.username}:`, err);
     }
   }
 }

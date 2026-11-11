@@ -68,7 +68,7 @@ function runMigrations(db: any) {
 
     -- 2. Multi-User Accounts Table
     CREATE TABLE IF NOT EXISTS users (
-      username TEXT PRIMARY KEY,
+      username TEXT PRIMARY KEY COLLATE NOCASE,
       password_hash TEXT NOT NULL,
       email TEXT UNIQUE,
       recovery_email TEXT,
@@ -210,14 +210,14 @@ function runMigrations(db: any) {
   addColumn('users', 'recovery_email', 'TEXT');
   addColumn('users', 'is_email_verified', 'INTEGER DEFAULT 0');
   
-  addColumn('conversations', 'username', 'TEXT NOT NULL DEFAULT "Sakib"');
+  addColumn('conversations', 'username', "TEXT NOT NULL DEFAULT 'Sakib'");
   addColumn('conversations', 'summary', 'TEXT');
   addColumn('conversations', 'is_archived', 'INTEGER DEFAULT 0');
   
-  addColumn('messages', 'username', 'TEXT NOT NULL DEFAULT "Sakib"');
+  addColumn('messages', 'username', "TEXT NOT NULL DEFAULT 'Sakib'");
   
-  addColumn('tasks', 'username', 'TEXT NOT NULL DEFAULT "Sakib"');
-  addColumn('tasks', 'schedule_type', 'TEXT DEFAULT "once"');
+  addColumn('tasks', 'username', "TEXT NOT NULL DEFAULT 'Sakib'");
+  addColumn('tasks', 'schedule_type', "TEXT DEFAULT 'once'");
   addColumn('tasks', 'scheduled_at', 'TEXT');
   addColumn('tasks', 'recurrence_rule', 'TEXT');
   addColumn('tasks', 'result_json', 'TEXT');

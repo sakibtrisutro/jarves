@@ -52,33 +52,47 @@ const authGuard = (req: Request, res: Response, next: any) => {
 // 1. AUTHENTICATION & MULTI-USER ENDPOINTS
 // -------------------------------------------------------------
 apiRouter.post('/auth/login', (req: Request, res: Response) => {
-  const { username, password, rememberMe } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
+  const rawUsername = req.body?.username;
+  const rawPassword = req.body?.password;
+  const rememberMe = req.body?.rememberMe === true;
+
+  if (rawUsername === undefined || rawUsername === null || rawPassword === undefined || rawPassword === null) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
+
+  const cleanUsername = String(rawUsername).trim();
+  const cleanPassword = String(rawPassword);
+
+  if (!cleanUsername || cleanPassword === '') {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
 
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'Database unavailable' });
 
   try {
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
-    if (!user || !verifyPassword(password, user.password_hash)) {
-      logEvent({ level: 'WARNING', category: 'SECURITY', component: 'AuthManager', message: `Failed login: ${username}`, error_code: 'INVALID_CREDENTIALS' });
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(TRIM(username)) = LOWER(?)').get(cleanUsername) as any;
+    const isValid = user && verifyPassword(cleanPassword, user.password_hash);
+
+    if (!user || !isValid) {
+      logEvent({ level: 'WARNING', category: 'SECURITY', component: 'AuthManager', message: `Failed login for user: ${cleanUsername}`, error_code: 'INVALID_CREDENTIALS' });
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
     // Seamless migration to scrypt if old hash format
     if (!user.password_hash.startsWith('scrypt:')) {
-      const upgradedHash = hashPassword(password);
-      db.prepare('UPDATE users SET password_hash = ?, updated_at = datetime("now") WHERE username = ?').run(upgradedHash, username);
-      logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Migrated password to scrypt: ${username}` });
+      const upgradedHash = hashPassword(cleanPassword);
+      db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE LOWER(TRIM(username)) = LOWER(?)").run(upgradedHash, user.username);
+      logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Migrated password to scrypt: ${user.username}` });
     }
 
-    const session = createSession(user.username, rememberMe === true);
+    const session = createSession(user.username, rememberMe);
     if (!session) throw new Error('Failed to create session');
 
     const isSecure = req.secure || process.env.NODE_ENV === 'production';
-    res.setHeader('Set-Cookie', formatSessionCookie(session.token, rememberMe === true, isSecure));
+    res.setHeader('Set-Cookie', formatSessionCookie(session.token, rememberMe, isSecure));
 
-    logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `User login: ${username}` });
+    logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `User login: ${user.username}` });
     res.json({ 
       success: true, 
       token: session.token,
@@ -98,32 +112,41 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
 });
 
 apiRouter.post('/auth/change-password', (req: Request, res: Response) => {
-  const { username, newPassword, currentPassword } = req.body;
-  if (!username || !newPassword || newPassword.length < 4) return res.status(400).json({ error: 'Invalid input. Password must be at least 4 characters.' });
+  const rawUsername = req.body?.username;
+  const rawNewPassword = req.body?.newPassword;
+  const rawCurrentPassword = req.body?.currentPassword;
+
+  const cleanUsername = String(rawUsername || '').trim();
+  const cleanNewPassword = String(rawNewPassword || '');
+  const cleanCurrentPassword = rawCurrentPassword !== undefined && rawCurrentPassword !== null ? String(rawCurrentPassword) : undefined;
+
+  if (!cleanUsername || !cleanNewPassword || cleanNewPassword.length < 4) {
+    return res.status(400).json({ error: 'Invalid input. Password must be at least 4 characters.' });
+  }
 
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'Database unavailable' });
 
   try {
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(TRIM(username)) = LOWER(?)').get(cleanUsername) as any;
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     // If current password provided, verify it
-    if (currentPassword && !verifyPassword(currentPassword, user.password_hash)) {
+    if (cleanCurrentPassword !== undefined && !verifyPassword(cleanCurrentPassword, user.password_hash)) {
       return res.status(401).json({ error: 'Current password verification failed' });
     }
 
-    const newHash = hashPassword(newPassword);
-    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime("now") WHERE username = ?').run(newHash, username);
+    const newHash = hashPassword(cleanNewPassword);
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE LOWER(TRIM(username)) = LOWER(?)").run(newHash, user.username);
     
     // Automatically issue a valid session so the user can immediately continue without getting stuck
-    const session = createSession(username, true);
+    const session = createSession(user.username, true);
     if (session) {
       const isSecure = req.secure || process.env.NODE_ENV === 'production';
       res.setHeader('Set-Cookie', formatSessionCookie(session.token, true, isSecure));
     }
 
-    logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Password changed for user: ${username}` });
+    logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Password changed for user: ${user.username}` });
     res.json({ 
       success: true, 
       message: 'Password updated successfully',
@@ -150,7 +173,7 @@ apiRouter.post('/auth/forgot-password', (req: Request, res: Response) => {
   // Check SMTP configuration status
   let smtpConfigured = Boolean(process.env.SMTP_HOST || process.env.SMTP_USER);
   try {
-    const row = db.prepare('SELECT value_json FROM settings WHERE key = "smtp"').get() as any;
+    const row = db.prepare("SELECT value_json FROM settings WHERE key = 'smtp'").get() as any;
     if (row?.value_json) {
       const cfg = JSON.parse(row.value_json);
       if (cfg.host && cfg.port) smtpConfigured = true;
@@ -173,7 +196,7 @@ apiRouter.post('/auth/forgot-password', (req: Request, res: Response) => {
   const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
 
   try {
-    db.prepare('INSERT INTO password_resets (email, token_hash, expires_at, created_at) VALUES (?, ?, ?, datetime("now"))').run(email, tokenHash, expiresAt);
+    db.prepare("INSERT INTO password_resets (email, token_hash, expires_at, created_at) VALUES (?, ?, ?, datetime('now'))").run(email, tokenHash, expiresAt);
     logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Password reset token generated for ${email}` });
     res.json({ success: true, message: 'Recovery email dispatched via configured SMTP relay.' });
   } catch (err: any) {
@@ -200,7 +223,7 @@ apiRouter.post('/auth/reset-password', (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ error: 'No associated user found' });
 
     const newHash = hashPassword(newPassword);
-    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime("now") WHERE username = ?').run(newHash, user.username);
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE LOWER(TRIM(username)) = LOWER(?)").run(newHash, user.username);
     db.prepare('DELETE FROM password_resets WHERE token_hash = ?').run(tokenHash);
 
     res.json({ success: true, message: 'Password reset successfully. You may now log in.' });
@@ -216,7 +239,7 @@ apiRouter.post('/auth/email', authGuard, (req: Request, res: Response) => {
   if (!db) return res.status(500).json({ error: 'Database unavailable' });
 
   try {
-    db.prepare('UPDATE users SET email = ?, recovery_email = ?, updated_at = datetime("now") WHERE username = ?').run(email || null, recoveryEmail || null, user.username);
+    db.prepare("UPDATE users SET email = ?, recovery_email = ?, updated_at = datetime('now') WHERE LOWER(TRIM(username)) = LOWER(?)").run(email || null, recoveryEmail || null, user.username);
     res.json({ success: true, message: 'Account email configuration updated' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -258,7 +281,7 @@ apiRouter.post('/auth/logout', (req: Request, res: Response) => {
 apiRouter.get('/auth/me', authGuard, (req: Request, res: Response) => {
   const user = (req as any).user;
   const db = getDb();
-  const userData = db?.prepare('SELECT username, role, voice_personality, email, recovery_email, must_change_password FROM users WHERE username = ?').get(user.username) as any;
+  const userData = db?.prepare('SELECT username, role, voice_personality, email, recovery_email, must_change_password FROM users WHERE LOWER(TRIM(username)) = LOWER(?)').get(user.username) as any;
   res.json({ 
     user: { 
       ...userData, 
@@ -289,7 +312,7 @@ apiRouter.post('/keys', authGuard, (req: Request, res: Response) => {
   try {
     const current = getApiKeys();
     current[provider.toLowerCase()] = apiKey.trim();
-    db.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES ("api_keys", ?, datetime("now")) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at').run(JSON.stringify(current));
+    db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES ('api_keys', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(JSON.stringify(current));
     logEvent({ level: 'INFO', category: 'SECURITY', component: 'KeyManager', message: `Updated key: ${provider}` });
     res.json({ success: true });
   } catch (err: any) {
@@ -305,7 +328,7 @@ apiRouter.delete('/keys/:provider', authGuard, (req: Request, res: Response) => 
   try {
     const current = getApiKeys();
     delete current[provider];
-    db.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES ("api_keys", ?, datetime("now")) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at').run(JSON.stringify(current));
+    db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES ('api_keys', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(JSON.stringify(current));
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -356,7 +379,7 @@ apiRouter.post('/models/initialize-intelligence', authGuard, async (req: Request
     if (keys.openai) discovered += await fetchOpenAiModels(keys.openai);
     if (keys.openrouter) discovered += await fetchOpenRouterModels(keys.openrouter);
 
-    db.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES ("intelligence_status", ?, datetime("now")) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at').run(JSON.stringify({ status: discovered > 0 ? 'ACTIVE' : 'FAILED', lastInitialized: new Date().toISOString(), discoveredCount: discovered }));
+    db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES ('intelligence_status', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(JSON.stringify({ status: discovered > 0 ? 'ACTIVE' : 'FAILED', lastInitialized: new Date().toISOString(), discoveredCount: discovered }));
 
     logEvent({ level: 'INFO', category: 'API', component: 'ModelIntelligenceEngine', message: `Intelligence Initialized. Discovered: ${discovered}` });
     res.json({ success: true, discoveredCount: discovered });
@@ -432,7 +455,7 @@ apiRouter.post('/tasks', authGuard, (req: Request, res: Response) => {
   try {
     db.prepare(`
       INSERT INTO tasks (id, username, title, description, status, priority, schedule_type, scheduled_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, datetime("now"), datetime("now"))
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, datetime('now'), datetime('now'))
     `).run(id, user.username, title, description || '', priority || 'normal', schedule_type || 'once', scheduled_at || null);
     
     recordEvent(user.username, 'task_created', 'New Task Registered', `Task "${title}" added to queue.`, id);
@@ -686,7 +709,7 @@ apiRouter.post('/tasks/:id/approve', authGuard, (req: Request, res: Response) =>
   const user = (req as any).user;
   if (!db) return res.status(500).json({ error: 'DB unavailable' });
   try {
-    db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime("now") WHERE id = ? AND username = ?`).run(req.params.id, user.username);
+    db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime('now') WHERE id = ? AND username = ?`).run(req.params.id, user.username);
     recordEvent(user.username, 'task_approved', 'Task Approved', `Task ${req.params.id} approved by executive.`, req.params.id);
     res.json({ success: true, message: 'Task approved and queued for execution' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -697,7 +720,7 @@ apiRouter.post('/tasks/:id/reject', authGuard, (req: Request, res: Response) => 
   const user = (req as any).user;
   if (!db) return res.status(500).json({ error: 'DB unavailable' });
   try {
-    db.prepare(`UPDATE tasks SET status = 'cancelled', updated_at = datetime("now") WHERE id = ? AND username = ?`).run(req.params.id, user.username);
+    db.prepare(`UPDATE tasks SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND username = ?`).run(req.params.id, user.username);
     recordEvent(user.username, 'task_rejected', 'Task Rejected', `Task ${req.params.id} rejected by executive.`, req.params.id);
     res.json({ success: true, message: 'Task rejected and cancelled' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -708,7 +731,7 @@ apiRouter.post('/tasks/:id/retry', authGuard, (req: Request, res: Response) => {
   const user = (req as any).user;
   if (!db) return res.status(500).json({ error: 'DB unavailable' });
   try {
-    db.prepare(`UPDATE tasks SET status = 'pending', error_json = NULL, updated_at = datetime("now") WHERE id = ? AND username = ?`).run(req.params.id, user.username);
+    db.prepare(`UPDATE tasks SET status = 'pending', error_json = NULL, updated_at = datetime('now') WHERE id = ? AND username = ?`).run(req.params.id, user.username);
     res.json({ success: true, message: 'Task reset to pending queue for retry' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -783,14 +806,14 @@ apiRouter.post('/chat', authGuard, async (req: Request, res: Response) => {
   try {
     const db = getDb();
     if (db) {
-      db.prepare('INSERT OR IGNORE INTO conversations (id, username, title, created_at, updated_at) VALUES (?, ?, ?, datetime("now"), datetime("now"))').run(convId, currentUser, message.substring(0, 30));
-      db.prepare('INSERT INTO messages (id, conversation_id, username, role, content, created_at) VALUES (?, ?, ?, ?, ?, datetime("now"))').run(`msg_${Date.now()}`, convId, currentUser, 'user', message);
+      db.prepare("INSERT OR IGNORE INTO conversations (id, username, title, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))").run(convId, currentUser, message.substring(0, 30));
+      db.prepare("INSERT INTO messages (id, conversation_id, username, role, content, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))").run(`msg_${Date.now()}`, convId, currentUser, 'user', message);
     }
 
     const ai = await generateJarvisResponse(message, history || [], { username: currentUser, language, voiceMode, provider, model, apiKey, freeOnly, forceModel, naturalInstructions });
 
     if (db) {
-      db.prepare('INSERT INTO messages (id, conversation_id, username, role, content, created_at) VALUES (?, ?, ?, ?, ?, datetime("now"))').run(`msg_${Date.now() + 1}`, convId, currentUser, 'assistant', ai.text);
+      db.prepare("INSERT INTO messages (id, conversation_id, username, role, content, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))").run(`msg_${Date.now() + 1}`, convId, currentUser, 'assistant', ai.text);
     }
 
     res.json({ text: ai.text, conversationId: convId, provider: ai.provider, model: ai.model, fallbackCount: ai.fallbackCount });
@@ -830,7 +853,7 @@ apiRouter.post('/settings', authGuard, (req: Request, res: Response) => {
   const { category, values } = req.body;
   if (!db || !category || !values) return res.status(400).json({ error: 'Invalid parameters.' });
   try {
-    db.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, datetime("now")) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at').run(category, JSON.stringify(values));
+    db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(category, JSON.stringify(values));
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

@@ -56,7 +56,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: selectedUser, password, rememberMe }),
+        body: JSON.stringify({ 
+          username: String(selectedUser).trim(), 
+          password: String(password), 
+          rememberMe: Boolean(rememberMe) 
+        }),
       });
 
       const data = await res.json();
@@ -92,12 +96,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
     setLoading(true);
     try {
-      const username = needsPasswordChangeUser || selectedUser;
+      const username = String(needsPasswordChangeUser || selectedUser).trim();
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, newPassword }),
+        body: JSON.stringify({ 
+          username, 
+          newPassword: String(newPassword),
+          currentPassword: String(password) 
+        }),
       });
 
       const data = await res.json();
