@@ -2,9 +2,10 @@
 .SYNOPSIS
     JARVIS v3.1 True Fresh Installation & Synchronization Script
 .DESCRIPTION
-    Pulls latest main from GitHub, sets up fresh data directories, installs dependencies,
-    initializes fresh SQLite WAL database with Sakib & Sanjida default accounts (temp password 1234),
-    builds the production app, creates desktop shortcut, and verifies backend health.
+    Stops any running server processes on port 3000, pulls latest main from GitHub,
+    sets up fresh data directories, installs dependencies, initializes fresh SQLite WAL database
+    with Sakib & Sanjida default accounts (temp password 1234), builds production app,
+    creates desktop shortcut, and verifies backend health.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -18,8 +19,25 @@ Write-Host ""
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
-# 1. Verify Git & Pull Latest Main
-Write-Host "[1/8] Synchronizing with authoritative GitHub repository..." -ForegroundColor Yellow
+# 1. Stop active JARVIS processes on port 3000 to release database file locks
+Write-Host "[1/8] Stopping any running JARVIS server instances..." -ForegroundColor Yellow
+try {
+    $connections = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
+    if ($connections) {
+        foreach ($conn in $connections) {
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 1
+        Write-Host "  [OK] Released database locks on port 3000." -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] No active process on port 3000." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "  [INFO] Process check skipped." -ForegroundColor Gray
+}
+
+# 2. Verify Git & Pull Latest Main
+Write-Host "[2/8] Synchronizing with authoritative GitHub repository..." -ForegroundColor Yellow
 try {
     $branch = git branch --show-current
     Write-Host "  [OK] Current branch: $branch" -ForegroundColor Gray
@@ -31,8 +49,8 @@ try {
     Write-Host "  [WARNING] Git synchronization skipped or offline mode active." -ForegroundColor Yellow
 }
 
-# 2. Check Node.js prerequisite
-Write-Host "[2/8] Checking Node.js runtime..." -ForegroundColor Yellow
+# 3. Check Node.js prerequisite
+Write-Host "[3/8] Checking Node.js runtime..." -ForegroundColor Yellow
 try {
     $nodeVersion = node -v
     Write-Host "  [OK] Found Node.js: $nodeVersion" -ForegroundColor Green
@@ -46,8 +64,8 @@ try {
     Exit 1
 }
 
-# 3. Check npm
-Write-Host "[3/8] Checking npm package manager..." -ForegroundColor Yellow
+# 4. Check npm
+Write-Host "[4/8] Checking npm package manager..." -ForegroundColor Yellow
 try {
     $npmVersion = npm -v
     Write-Host "  [OK] Found npm: $npmVersion" -ForegroundColor Green
@@ -56,19 +74,23 @@ try {
     Exit 1
 }
 
-# 4. Create fresh runtime directories
-Write-Host "[4/8] Setting up fresh persistent directories (data, logs, backups)..." -ForegroundColor Yellow
+# 5. Create fresh runtime directories & purge old database
+Write-Host "[5/8] Setting up fresh persistent directories (data, logs, backups)..." -ForegroundColor Yellow
 $dataDir = Join-Path $projectRoot "data"
 $logsDir = Join-Path $projectRoot "logs"
 $backupsDir = Join-Path $projectRoot "backups"
 
-# Ensure old SQLite DB is completely removed for true clean install
 $dbPath = Join-Path $dataDir "jarvis_operational.db"
 if (Test-Path $dbPath) {
-    Remove-Item $dbPath -Force
-    Remove-Item "$dbPath-wal" -Force -ErrorAction SilentlyContinue
-    Remove-Item "$dbPath-shm" -Force -ErrorAction SilentlyContinue
-    Write-Host "  [FRESH] Purged previous operational database." -ForegroundColor Magenta
+    try {
+        Remove-Item $dbPath -Force -ErrorAction Stop
+        Remove-Item "$dbPath-wal" -Force -ErrorAction SilentlyContinue
+        Remove-Item "$dbPath-shm" -Force -ErrorAction SilentlyContinue
+        Write-Host "  [FRESH] Purged previous operational database." -ForegroundColor Magenta
+    } catch {
+        Write-Host "  [WARNING] Database file is still locked. Please close any open file handles and rerun install.bat." -ForegroundColor Red
+        Exit 1
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
@@ -76,8 +98,8 @@ New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $backupsDir | Out-Null
 Write-Host "  [OK] Fresh runtime directories created." -ForegroundColor Green
 
-# 5. Environment configuration
-Write-Host "[5/8] Verifying environment configuration (.env)..." -ForegroundColor Yellow
+# 6. Environment configuration
+Write-Host "[6/8] Verifying environment configuration (.env)..." -ForegroundColor Yellow
 $envPath = Join-Path $projectRoot ".env"
 $envExamplePath = Join-Path $projectRoot ".env.example"
 
@@ -93,8 +115,8 @@ if (-not (Test-Path $envPath)) {
     Write-Host "  [OK] Existing .env preserved." -ForegroundColor Green
 }
 
-# 6. Install dependencies
-Write-Host "[6/8] Installing project dependencies..." -ForegroundColor Yellow
+# 7. Install dependencies
+Write-Host "[7/8] Installing project dependencies..." -ForegroundColor Yellow
 npm install --loglevel=error
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  [ERROR] Dependency installation failed." -ForegroundColor Red
@@ -102,8 +124,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [OK] Dependencies installed successfully." -ForegroundColor Green
 
-# 7. Build production application
-Write-Host "[7/8] Building production application..." -ForegroundColor Yellow
+# 8. Build production application & create desktop shortcut
+Write-Host "[8/8] Building production application & setting up launcher..." -ForegroundColor Yellow
 npm run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  [ERROR] Production build failed." -ForegroundColor Red
@@ -111,8 +133,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [OK] Production build complete." -ForegroundColor Green
 
-# 8. Create Windows Desktop Shortcut
-Write-Host "[8/8] Creating Desktop launcher shortcut..." -ForegroundColor Yellow
 try {
     $WshShell = New-Object -comObject WScript.Shell
     $desktopPath = [System.Environment]::GetFolderPath('Desktop')
