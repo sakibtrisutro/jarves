@@ -1,0 +1,1035 @@
+# JARVIS — FINAL FULLY OPERATIONAL SYSTEM COMPLETION MASTER PROMPT
+
+## MISSION
+
+You are working on the existing JARVIS repository.
+
+Your mission is to audit, repair, complete, integrate, and verify the existing JARVIS system so that it becomes a genuinely functional, reliable, secure, fully operational personal AI assistant on Windows.
+
+This is a comprehensive system-completion task, not a UI redesign, not a fresh rebuild, and not a demonstration project.
+
+**Do not merely create buttons, screens, mock data, placeholder settings, simulated statuses, or documentation. Every implemented feature must work end-to-end.**
+
+The repository already contains existing application code, backend services, database, AI provider integration, voice features, agents, dashboard, diagnostics, Windows scripts, and other functionality. Inspect and understand the actual implementation before making changes.
+
+Do not assume that a feature works just because a screen or endpoint exists.
+
+---
+
+# 1. NON-NEGOTIABLE ENGINEERING RULES
+
+1. Preserve the existing JARVIS architecture and working features.
+2. Do not rebuild the application from scratch.
+3. Do not remove, disable, replace, or silently simplify existing functionality.
+4. Preserve existing branding, visual identity, navigation, dashboard layout, components, typography, colors, responsive behavior, and working interactions.
+5. Preserve existing database records, user data, conversation history, memories, uploads, settings, and operational logs.
+6. Do not delete or reset existing data during an update, installation, migration, or repair.
+7. Do not introduce fake providers, fake model availability, fake quota information, fake connected statuses, or simulated success.
+8. Do not expose API keys, Telegram tokens, passwords, session secrets, or other sensitive information in frontend code, browser storage, logs, Git commits, or API responses.
+9. Do not make paid API calls without explicit user authorization.
+10. Do not silently switch to a paid provider or model.
+11. Do not claim a feature is tested unless an actual test was performed.
+12. Do not claim Windows hardware, microphone, speaker, LAN, or Telegram integration was physically tested unless it actually was.
+13. Do not use force-push, overwrite remote work, or change branches without a valid reason.
+14. Do not leave frontend and backend function names, payload structures, database fields, or response formats inconsistent.
+15. Do not leave incomplete TODOs, placeholder controls, or nonfunctional settings in any feature marked complete.
+
+Before implementation, create an internal audit of:
+- Existing frontend architecture.
+- Backend architecture and API routes.
+- Database schema and migrations.
+- AI provider services.
+- Model Intelligence implementation.
+- Voice/STT/TTS implementation.
+- Telegram implementation.
+- Authentication and authorization.
+- Agent and memory systems.
+- Windows installation and runtime scripts.
+- Existing tests and known failures.
+
+Identify the actual root causes, not just visible symptoms.
+
+Then implement the necessary corrections in the existing architecture.
+
+---
+
+# 2. AI PROVIDER MANAGEMENT — COMPLETE IMPLEMENTATION
+
+The system must support independent configuration of:
+
+- Google Gemini
+- OpenAI
+- OpenRouter
+
+Do not hardcode one provider as the only usable provider.
+
+## Provider configuration
+
+For each provider, implement:
+
+- Enable/disable.
+- API key input.
+- Secure save/update.
+- Show/hide key.
+- Test connection.
+- Fetch available models.
+- Display provider connection status.
+- Display last successful test.
+- Display useful error details without exposing secrets.
+- Update or replace API key.
+- Delete credentials securely.
+- Revalidate credentials after updates.
+- Handle invalid, expired, revoked, or restricted API keys.
+
+Credentials must be stored securely on the backend. Encrypt sensitive credentials at rest using an appropriate application-managed encryption design. Do not store API keys in plaintext localStorage or expose them to the browser after saving.
+
+Use environment variables or a secure installation-generated secret for encryption keys. Never commit secrets.
+
+## Provider verification
+
+A provider must not show CONNECTED merely because an API key was entered.
+
+It must pass an actual connection test.
+
+Differentiate:
+- Configured.
+- Connection successful.
+- Authentication failed.
+- Rate limited.
+- Quota exhausted.
+- Temporarily unavailable.
+- Provider service error.
+- Not tested.
+- Disabled.
+
+Do not confuse configured credentials with a functioning provider.
+
+---
+
+# 3. MODEL INTELLIGENCE — REAL AUTOMATIC MODEL DISCOVERY AND SELECTION
+
+This is one of the most important parts of the system.
+
+The current behavior is insufficient if users must manually choose a model after clicking Initialize Model Intelligence.
+
+Implement an actual Model Intelligence service.
+
+## A. Initialization workflow
+
+When the user clicks Initialize Model Intelligence:
+
+1. Read all enabled provider configurations from the secure backend.
+2. Validate configured provider credentials.
+3. Retrieve current model catalogs from the providers.
+4. Identify models that the configured account can actually access.
+5. Collect available model metadata.
+6. Determine pricing/free eligibility using trustworthy provider information.
+7. Perform safe, minimal live capability probes where supported.
+8. Evaluate model suitability.
+9. Rank eligible models.
+10. Build a primary, secondary, and backup model pipeline.
+11. Select the best eligible primary model automatically when Auto Select is enabled.
+12. Persist the evaluated configuration.
+13. Display the real result in the dashboard and Model Intelligence settings.
+
+Do not treat initialization as successful if it only loads a model list.
+
+## B. Model evaluation criteria
+
+Evaluate models using available evidence:
+
+- Free or paid status.
+- Actual account eligibility.
+- Model availability.
+- Context window.
+- Maximum output tokens.
+- Reasoning capability.
+- Coding capability.
+- Tool/function calling support.
+- Structured output support.
+- Image and multimodal support.
+- Language capability.
+- Latency and response speed.
+- Rate limits.
+- Daily/monthly quotas when exposed.
+- Provider reliability.
+- Actual API test results.
+- Task suitability.
+
+Use transparent scoring and ranking.
+
+Do not invent unknown context limits, free status, token quotas, pricing, or capabilities.
+
+If information cannot be verified, label it UNKNOWN.
+
+## C. Free Mode — strict default
+
+The default operating mode must be FREE MODE.
+
+In Free Mode:
+- Use only models verified as free and eligible for the configured account.
+- Do not silently use paid models.
+- Do not make paid requests during model discovery or probing.
+- If a model's pricing or eligibility is uncertain, exclude it from the free pipeline until verified.
+- If no eligible model exists, clearly report that no verified free model is currently available.
+
+Paid Mode must require explicit user activation and authorization.
+
+## D. Automatic priority pipeline
+
+Build a real priority pipeline:
+
+- Primary model.
+- Secondary model.
+- Backup model.
+- Additional eligible fallbacks.
+
+The pipeline must be persisted and enforced by the backend, not merely displayed in the UI.
+
+For each model, record:
+- Provider.
+- Exact model ID.
+- Eligibility.
+- Priority.
+- Health status.
+- Last successful test.
+- Last failure.
+- Reason for selection or rejection.
+- Last evaluation time.
+
+## E. Automatic fallback
+
+When a request fails because of:
+- HTTP 429.
+- Rate limit.
+- Quota exhaustion.
+- Temporary provider unavailability.
+- Timeout.
+- Model-specific service failure.
+
+The system must classify the error and attempt the next eligible model when safe.
+
+Rules:
+- Never switch to a paid model in Free Mode.
+- Never retry indefinitely.
+- Use bounded retries and sensible backoff.
+- Do not repeat an operation that could create duplicate side effects.
+- Preserve conversation context when switching models.
+- Record which model actually handled each request.
+- Tell the user when a fallback occurred.
+- Distinguish quota exhaustion from authentication failure and provider outages.
+- If all eligible models fail, return a useful explanation rather than pretending success.
+
+If a provider does not expose quota information, report quota status as UNKNOWN until a real response provides evidence.
+
+## F. Manual override and Auto Select
+
+Provide:
+- Auto Select.
+- Manual Select.
+- Force Model.
+- Restore Automatic Selection.
+- Refresh Model Catalog.
+- Re-evaluate Pipeline.
+
+Manual selection must be respected until the user changes it or restores Auto Select.
+
+Force Model must be enforced by the backend. The UI must not show one model while requests are secretly handled by another.
+
+Do not silently override a user's manual choice. If it becomes unavailable, explain the failure and ask or use only a fallback explicitly permitted by the user's configured policy.
+
+## G. Task-aware model routing
+
+Where practical, select models according to task type:
+
+- General conversation.
+- Complex reasoning.
+- Coding and debugging.
+- Long-context analysis.
+- Image understanding.
+- Tool execution.
+- Translation and multilingual work.
+
+A model must not be selected for a capability it does not actually support.
+
+## H. Dashboard model visibility
+
+The dashboard must display:
+
+- Active provider name.
+- Exact active model ID.
+- Provider connection status.
+- Model health.
+- Intelligence initialized/not initialized.
+- Auto or Manual mode.
+- Primary/Secondary/Backup priority.
+- Current eligibility.
+- Quota status, only when genuinely available.
+- Last model evaluation.
+- Last fallback event.
+- Current failure reason when applicable.
+
+Resolve any disagreement between `/api/health`, backend Intelligence state, and dashboard state.
+
+A system cannot report Model Intelligence ACTIVE when it has not actually initialized a usable pipeline.
+
+---
+
+# 4. VOICE SYSTEM — PUSH-TO-TALK FIRST, NO FEEDBACK LOOP
+
+The current voice behavior must be audited and corrected.
+
+The default user experience must be button-controlled Push-to-Talk.
+
+## A. Default voice settings
+
+- Push-to-Talk: ON.
+- Auto Listen: OFF.
+- Continuous Conversation: OFF.
+- Microphone: user-selected.
+- Speech recognition language: configurable.
+- Speech output voice: configurable.
+- Speech speed and volume: configurable where supported.
+
+Do not automatically activate the microphone when the application loads.
+
+## B. Correct interaction flow
+
+The expected workflow:
+
+1. User presses the microphone button.
+2. JARVIS starts listening.
+3. User speaks.
+4. User releases or stops the microphone.
+5. Speech recognition completes.
+6. JARVIS processes the recognized request.
+7. JARVIS returns its response.
+8. Text-to-speech speaks the response if enabled.
+9. Microphone remains inactive until the user presses the button again.
+
+Do not process partial speech as a completed request unless the selected recognition engine explicitly supports a deliberate streaming mode.
+
+## C. Eliminate self-listening and feedback loops
+
+Implement a robust audio state machine.
+
+At minimum, distinguish:
+- IDLE.
+- LISTENING.
+- PROCESSING.
+- SPEAKING.
+- INTERRUPTED.
+- ERROR.
+
+During TTS playback:
+- Stop or suspend microphone capture.
+- Prevent the assistant's own voice from becoming a new user request.
+- Resume listening only when explicitly permitted by settings.
+- Use echo cancellation where supported.
+- Clean up media streams and recognition sessions correctly.
+- Prevent duplicated recognition callbacks.
+- Prevent stale audio sessions from submitting requests.
+
+Preserve existing:
+- Read Aloud.
+- Instant Stop.
+- VolumeX stopped state.
+- Barge-in/interruption behavior where supported.
+- Speech cancellation.
+- Session-token protections.
+- Voice response functionality.
+
+Do not regress the existing Read Aloud cancellation hotfix.
+
+## D. Voice configuration screen
+
+Provide a dedicated Voice & Audio section in Settings with:
+
+- Push-to-Talk toggle.
+- Auto Listen toggle.
+- Continuous Conversation toggle.
+- Microphone selection.
+- Microphone test.
+- Speech recognition engine.
+- TTS engine.
+- Voice selection.
+- Language selection.
+- Speech speed.
+- Volume.
+- Voice output enable/disable.
+- Local/Cloud engine indicator.
+- Clear permissions/error guidance.
+
+All settings must be saved and actually applied.
+
+---
+
+# 5. OPTIONAL LOCAL SPEECH ENGINE
+
+The user wants the option to process speech locally without sending voice audio to a cloud AI provider.
+
+Audit the existing voice architecture and determine what can be supported reliably.
+
+Evaluate suitable local STT/TTS implementations, such as:
+- whisper.cpp or faster-whisper for local speech recognition.
+- Piper or another actively maintained suitable local TTS engine.
+
+These are evaluation candidates, not permission to install arbitrary dependencies or download large models automatically.
+
+## Requirements
+
+1. Clearly distinguish Local STT, Cloud STT, Local TTS, and Cloud TTS.
+2. Provide optional local engine selection.
+3. Show model size, storage requirement, approximate resource needs, and compatibility before installation.
+4. Show whether CPU or GPU acceleration is available.
+5. Provide explicit user consent before downloading models or installing large dependencies.
+6. Support model download progress, validation, cancellation, and retry.
+7. Provide model removal and engine switching.
+8. Never silently replace the existing working cloud voice engine.
+9. If local setup fails, preserve the existing working configuration.
+10. Do not claim that voice data is processed locally unless the actual implementation proves it.
+
+Local STT/TTS must remain optional.
+
+If a reliable implementation cannot be completed safely within the current architecture, report the exact blocker instead of presenting a fake local mode.
+
+---
+
+# 6. SETTINGS — COMPLETE FUNCTIONAL CONFIGURATION CENTER
+
+Settings and Diagnostics must have clearly separated responsibilities.
+
+Diagnostics is for system health, metrics, logs, errors, and troubleshooting.
+
+Settings is for changing and saving system behavior.
+
+Build on the existing interface. Preserve the existing design and navigation.
+
+Implement functional configuration areas:
+
+## A. AI Providers
+Provider credentials, testing, model discovery, connection status, enable/disable, update, and removal.
+
+## B. Model Intelligence
+Initialization, Auto Select, Manual Select, Force Model, Free/Paid mode, priority pipeline, refresh, evaluation, and fallback policy.
+
+## C. Voice & Audio
+All controls described in Section 4 and optional local engine controls described in Section 5.
+
+## D. Telegram
+Full configuration described in Section 7.
+
+## E. Agents
+- List existing agents.
+- Enable/disable each agent.
+- Show actual status.
+- Configure supported agent settings.
+- Prevent disabled agents from executing.
+- Show last execution and error information.
+- Do not create fake agents or fake activity.
+
+## F. Memory
+- Enable/disable supported memory functions.
+- Configure retention where implemented.
+- Show memory storage status.
+- Provide safe memory inspection and deletion controls.
+- Keep user memories isolated.
+- Never allow one account to access another account's memory.
+
+## G. Accounts & Security
+- Account management.
+- Password change.
+- Session management.
+- Logout.
+- Authentication status.
+- Access-control settings.
+- Security event visibility.
+
+## H. Network & LAN
+- Server status.
+- Current bind address.
+- Current port.
+- LAN access status.
+- Private network guidance.
+- Firewall guidance.
+- No public tunnel or port forwarding by default.
+- No accidental public exposure.
+
+## I. Notifications
+- Enable/disable supported notification channels.
+- Configure notification preferences.
+- Display delivery status and errors.
+- Do not show success for messages that were not delivered.
+
+## J. System
+- Startup behavior.
+- Start/stop/restart status.
+- Update status.
+- Backup.
+- Restore.
+- Diagnostics export.
+- Version information.
+- Data directory information.
+- Safe shutdown.
+
+All Settings must persist after a restart and must affect the real backend behavior.
+
+Do not add decorative controls that have no implementation.
+
+---
+
+# 7. TELEGRAM — COMPLETE OPTIONAL TWO-WAY INTEGRATION
+
+Telegram must be fully implemented but completely optional.
+
+A fresh installation must not require Telegram credentials.
+
+Before valid credentials are saved and Telegram is explicitly enabled:
+- Telegram must remain inactive.
+- No Telegram API calls should be made.
+- Diagnostics must not show a fake Connected state.
+- Missing credentials must not break JARVIS.
+
+## Telegram Settings fields
+
+Implement supported fields for:
+- Bot Token.
+- Bot Username.
+- Bot ID.
+- Chat ID.
+- Authorized User IDs / Allowlist.
+- Webhook URL.
+- Webhook Secret.
+- Polling or Webhook mode.
+- Enable/Disable.
+- Connection Test.
+- Get Bot Info.
+- Get Chat Info.
+- Save/Update.
+- Disconnect.
+- Clear credentials.
+- Current status.
+- Last successful communication.
+- Last error.
+
+Never expose the full bot token after saving.
+
+## Two-way functionality
+
+Where supported by the existing architecture, implement:
+- Incoming Telegram messages.
+- Outgoing replies.
+- Model-routed responses.
+- Conversation context.
+- Authorized-user enforcement.
+- Safe command handling.
+- Error reporting.
+- Message delivery status.
+- Polling/webhook lifecycle.
+- Duplicate update prevention.
+
+Only authorized users may interact with JARVIS through Telegram.
+
+Never allow an unauthorized Telegram user to access private conversations, memory, settings, or system commands.
+
+Use the same Free Mode and paid-model authorization rules as the web application.
+
+If Telegram is disconnected, the rest of JARVIS must continue functioning.
+
+---
+
+# 8. TWO ACCOUNTS, AUTHENTICATION AND STRICT DATA ISOLATION
+
+The intended initial accounts are:
+
+- Sakib.
+- Sanjida.
+
+For a genuinely fresh installation, create the two initial accounts with temporary password `1234`, then force each account to change its password on first login.
+
+Security requirements:
+- Store passwords using a strong password hashing algorithm.
+- Do not store plaintext passwords.
+- Force password change before normal use.
+- Secure session handling.
+- Secure logout and session invalidation.
+- Login rate limiting.
+- Appropriate authentication and authorization checks on backend routes.
+- Protect against unauthorized account access.
+
+## Strict isolation
+
+Each account must have separate:
+- Conversations.
+- Memory.
+- Preferences.
+- Personal settings.
+- Relevant history.
+- User-specific data.
+
+A user must never be able to read, edit, delete, or export another user's private information.
+
+Do not reset existing accounts or passwords during an ordinary update.
+
+If initial account provisioning already exists, preserve it and safely reconcile the intended behavior instead of creating duplicate accounts.
+
+---
+
+# 9. DASHBOARD — ACCURATE REAL-TIME SYSTEM STATUS
+
+The dashboard must reflect actual backend state.
+
+Display meaningful values for:
+- Backend health.
+- Database health.
+- AI provider configuration and connectivity.
+- Active provider.
+- Active model.
+- Model Intelligence initialization.
+- Auto/Manual mode.
+- Model pipeline health.
+- Voice engine readiness.
+- Voice mode.
+- Telegram status.
+- Active agents.
+- Current tasks.
+- Recent events.
+- Important errors.
+
+Do not show a green/healthy/active state merely because a feature is configured.
+
+Distinguish:
+- CONFIGURED.
+- INITIALIZED.
+- CONNECTED.
+- HEALTHY.
+- DEGRADED.
+- DISABLED.
+- NOT CONFIGURED.
+- ERROR.
+
+All dashboard values must come from real backend data.
+
+Fix inconsistencies between Dashboard, Settings, Diagnostics, and `/api/health`.
+
+---
+
+# 10. DIAGNOSTICS, LOGGING AND AUTOMATIC RECOVERY
+
+Diagnostics must be a reliable troubleshooting center.
+
+Implement:
+- Backend health.
+- Database connectivity.
+- Provider health.
+- Model Intelligence health.
+- Voice engine status.
+- Telegram status.
+- Agent status.
+- API errors.
+- Recent failures.
+- Startup failures.
+- Runtime errors.
+- Model fallback history.
+- Database errors.
+- Resource and process status where supported.
+
+## Recovery
+
+Implement safe recovery mechanisms where appropriate:
+- Retry transient provider failures with bounded backoff.
+- Recover interrupted model evaluations.
+- Detect stale or failed background processes.
+- Clean up abandoned audio sessions.
+- Recover from temporary Telegram failures.
+- Handle database connection interruptions safely.
+
+Never automatically perform destructive recovery.
+
+Never delete user data to resolve an ordinary error.
+
+Maintain useful logs while redacting secrets, tokens, passwords, and private message contents where appropriate.
+
+---
+
+# 11. DATABASE AND TRANSACTION SAFETY
+
+Audit the actual database and all data-access paths.
+
+Requirements:
+- Consistent schema and migrations.
+- Safe migration of existing installations.
+- No accidental data loss.
+- Correct relationships and indexes.
+- Appropriate transactions.
+- Rollback on partial failure.
+- Duplicate-operation protection where appropriate.
+- Database integrity checks.
+- Safe connection lifecycle.
+- Correct user ownership enforcement.
+
+Do not replace an existing database with a new empty database.
+
+If a migration is necessary:
+1. Back up existing data.
+2. Validate the current schema.
+3. Apply a safe migration.
+4. Verify migrated records.
+5. Preserve rollback/recovery options.
+
+---
+
+# 12. WINDOWS INSTALLER, LAUNCHER AND RUNTIME RELIABILITY
+
+The Windows installation has previously encountered PowerShell parser errors, a Vite `index.html` resolution error, and a launcher that repeatedly displayed “Waiting for Server” even though manually starting the backend worked.
+
+Audit and fix the actual root causes.
+
+Review:
+- install-windows.ps1.
+- install.bat.
+- start.bat.
+- stop.bat.
+- restart.bat.
+- update.bat.
+- diagnostics.bat.
+- backup.bat.
+- restore.bat.
+- uninstall.bat.
+- Desktop shortcut / Executive OS Launcher.
+- Server startup.
+- Health-check logic.
+- Process and port handling.
+- Working-directory resolution.
+- Production build output.
+- Frontend/backend serving configuration.
+
+## Launcher requirements
+
+The launcher must:
+1. Resolve the actual repository path dynamically.
+2. Start the correct production runtime.
+3. Wait for a real health response.
+4. Use a sensible timeout.
+5. Detect process exit and startup errors.
+6. Show useful error details instead of looping forever.
+7. Avoid launching duplicate backend instances.
+8. Open the dashboard only after successful readiness.
+9. Provide a reliable stop and restart path.
+10. Work even when the repository path contains spaces.
+
+Do not hardcode `C:\JARVIS` or assume a particular installation directory.
+
+## Installation and update
+
+- Use the committed package-lock file.
+- Use supported Node.js LTS versions.
+- Check every important command's exit code.
+- Fail safely if dependencies or build fail.
+- Preserve `.env`, database, memory, uploads, logs, and backups.
+- Never delete operational data during update.
+- Provide clear installation and recovery messages.
+- Do not open source scripts or text files as a substitute for launching the application.
+
+## Network
+
+Default to private local operation.
+
+For LAN access:
+- Bind to the correct interface only when configured.
+- Keep localhost access working.
+- Explain private Windows Firewall rules.
+- Do not create public tunnel connections.
+- Do not configure router port forwarding.
+- Do not expose the server publicly by default.
+- Protect LAN endpoints with authentication and appropriate origin/security controls.
+
+Optional Windows autostart must be OFF by default.
+
+---
+
+# 13. DATA BACKUP AND RESTORE
+
+Implement reliable operational backups.
+
+Backup should include all necessary user data and configuration, while protecting secrets.
+
+Requirements:
+- Timestamped backups.
+- Database consistency.
+- Backup validation.
+- Restore validation.
+- Clear success/failure report.
+- Restore confirmation.
+- Safe recovery before restore.
+- No accidental overwrite without confirmation.
+- Backup retention policy where supported.
+
+Do not claim a backup is valid merely because a file was created. Verify its integrity.
+
+---
+
+# 14. FRONTEND AND BACKEND INTEGRATION
+
+Audit every relevant UI interaction.
+
+For every control, verify:
+- Correct API endpoint.
+- Correct request payload.
+- Correct response parsing.
+- Correct error handling.
+- Correct database persistence.
+- Correct refresh behavior.
+- Correct authorization.
+- Correct state synchronization.
+
+Fix:
+- Mismatched frontend/backend function names.
+- Mismatched endpoint paths.
+- Incorrect payload fields.
+- Inconsistent response structures.
+- Stale state.
+- Race conditions.
+- Duplicate event handlers.
+- False success notifications.
+- Silent failures.
+- Incorrect loading states.
+
+Do not leave a button that appears functional but has no working backend action.
+
+Do not expose internal server errors or secrets to ordinary users.
+
+---
+
+# 15. TESTING — REAL ACCEPTANCE TESTS
+
+Run the tests against the actual implementation.
+
+Do not rely only on TypeScript compilation or a successful Vite build.
+
+## Required checks
+
+- `npm ci`
+- `npm run lint`
+- `npm test` or the actual test script defined by the repository.
+- `npm run build`
+
+Then add or update tests for the following.
+
+### AI Provider tests
+- Valid credentials.
+- Invalid credentials.
+- Provider unavailable.
+- Model catalog retrieval.
+- Secret redaction.
+- Credential update and deletion.
+
+### Model Intelligence tests
+- Initialization.
+- Model discovery.
+- Free eligibility.
+- Unknown pricing.
+- Ranking.
+- Auto selection.
+- Manual selection.
+- Force Model.
+- Primary-to-secondary fallback.
+- 429 handling.
+- Quota exhaustion.
+- Provider outage.
+- Paid-model rejection in Free Mode.
+- Accurate active-model reporting.
+
+### Voice tests
+- Push-to-Talk.
+- Auto Listen disabled by default.
+- Continuous Conversation disabled by default.
+- Listen-to-process-to-speak sequence.
+- Microphone cleanup.
+- TTS cancellation.
+- No duplicate submissions.
+- No self-listening loop.
+- Existing Read Aloud instant stop regression tests.
+
+### Telegram tests
+- Unconfigured state.
+- Invalid token.
+- Valid token.
+- Authorized user.
+- Unauthorized user rejection.
+- Incoming and outgoing message handling.
+- Duplicate update protection.
+- Disconnect behavior.
+
+### Security tests
+- Login.
+- Forced first password change.
+- Session invalidation.
+- Account isolation.
+- Unauthorized API access.
+- Secret exposure checks.
+
+### Database tests
+- Migration.
+- Existing data preservation.
+- Transaction rollback.
+- Backup.
+- Restore.
+- Integrity.
+
+### Windows tests
+- Script syntax validation.
+- Path with spaces.
+- Dependency failure handling.
+- Build failure handling.
+- Startup health check.
+- Port conflict handling.
+- Stop/restart behavior.
+- Data preservation.
+
+Where physical Windows or hardware tests cannot be executed in the current environment, clearly mark them NOT PHYSICALLY VERIFIED and provide exact manual test instructions.
+
+Do not fake test results.
+
+---
+
+# 16. COMPLETION CRITERIA
+
+The project is complete only when:
+
+1. Existing working features remain functional.
+2. Provider settings genuinely save and test credentials.
+3. Model Intelligence discovers, evaluates, ranks, and selects eligible models.
+4. Free Mode never silently calls paid models.
+5. Fallback works under real error conditions.
+6. Active model reporting is accurate.
+7. Push-to-Talk works without a self-listening feedback loop.
+8. Local voice is either genuinely implemented as optional or clearly documented as not yet supported.
+9. Settings controls are connected to real backend functionality.
+10. Telegram is fully configurable and optional.
+11. Accounts and private data remain isolated.
+12. Dashboard and Diagnostics reflect actual health.
+13. Database and user data survive updates.
+14. Windows installation and launcher errors are corrected.
+15. Backup and restore are verified.
+16. Required automated tests pass.
+17. No secrets or sensitive data are committed.
+18. All completed work is committed and pushed to GitHub `main`.
+
+If a requirement cannot be completed because of a genuine technical limitation, document the exact limitation, its cause, what was implemented, and what remains. Do not hide it behind a success message.
+
+---
+
+# 17. GITHUB MAIN — MANDATORY RELEASE PROTOCOL
+
+The repository's `main` branch is the authoritative production branch.
+
+After implementation:
+
+1. Inspect all changed files.
+2. Review the complete diff.
+3. Confirm no secrets, credentials, local databases, personal data, generated backups, or temporary files are included.
+4. Run all available tests.
+5. Run lint and production build.
+6. Confirm the application can start using the production runtime.
+7. Commit all approved changes to `main`.
+8. Push to `origin/main`.
+9. Verify the remote `main` HEAD commit SHA.
+10. Verify the remote files contain the final implementation.
+11. Confirm the working tree and branch state.
+
+Never:
+- Force-push.
+- Overwrite unrelated work.
+- Commit secrets.
+- Claim a push succeeded without verifying it.
+- Claim remote verification without checking remote state.
+
+If a merge conflict or remote change is encountered, stop and safely reconcile it. Do not destroy existing work.
+
+---
+
+# 18. FINAL REPORT — REQUIRED FORMAT
+
+After the work is complete, provide a concise but complete report containing:
+
+## A. Repository
+- Branch.
+- Previous HEAD SHA.
+- Final HEAD SHA.
+- Commit message.
+- Push confirmation.
+- Remote verification.
+
+## B. Implementation
+For each major area, report:
+- Existing issue.
+- Root cause.
+- Files changed.
+- Actual correction.
+- Verification result.
+
+Cover:
+- AI Providers.
+- Model Intelligence.
+- Automatic model selection.
+- Free Mode and fallback.
+- Voice and audio.
+- Optional local voice.
+- Settings.
+- Telegram.
+- Accounts and Security.
+- Dashboard.
+- Diagnostics.
+- Database.
+- Windows installer and launcher.
+- LAN and backup/restore.
+
+## C. Test results
+
+Provide actual results for:
+- Dependency installation.
+- Lint.
+- Automated tests.
+- Production build.
+- API tests.
+- Security tests.
+- Startup/health tests.
+- Windows/hardware tests, where physically performed.
+
+## D. Remaining limitations
+
+List every incomplete or unverified item explicitly.
+
+## E. Windows update instructions
+
+Give the exact steps the user must follow after pulling the final `main` branch.
+
+## F. Final status
+
+Use one of these honest statuses:
+
+- FULLY VERIFIED — all applicable tests and physical checks passed.
+- SOFTWARE VERIFIED — automated/software checks passed; physical Windows, LAN, or hardware checks remain.
+- PARTIALLY COMPLETE — specific requirements remain incomplete.
+- BLOCKED — a critical issue prevents safe completion.
+
+Do not use FULLY VERIFIED just because the build succeeds.
+
+---
+
+# FINAL EXECUTION INSTRUCTION
+
+Start by auditing the actual current repository and identifying the real root causes.
+
+Then implement the required work in the existing architecture, integrate frontend/backend/database behavior, add meaningful automated tests, validate the production build, and complete the GitHub `main` release protocol.
+
+Do not stop after writing an implementation plan.
+
+Do not ask the user to manually select models or configure internal services that the application is supposed to manage automatically.
+
+Do not create fake settings or simulated integrations.
+
+Do not sacrifice existing functionality to make the new features appear complete.
+
+**The final objective is a stable, secure, genuinely usable JARVIS system—not merely a successful build, attractive dashboard, or feature checklist.**

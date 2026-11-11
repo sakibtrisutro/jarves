@@ -1,0 +1,17 @@
+{
+  "name": "JARVIS Executive OS",
+  "short_name": "JARVIS",
+  "description": "TRISUTRO Virtual CEO & Autonomous Executive AI Partner",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#06b6d4",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2593/2593635.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "JARVIS Executive AI System",
+  "version": "2.0.0",
+  "targetPlatforms": ["Windows 10/11", "Google AI Studio Preview", "Linux Node 20+"],
+  "prerequisites": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0",
+    "sqlite": "Built-in (node:sqlite / SQLite 3.40+ WAL)",
+    "git": ">=2.30.0"
+  },
+  "runtimeComponents": {
+    "voiceEngine": "Web Speech API (Browser) + Gemini 3.5 Transcribe & 3.8 TTS (Cloud/Backend)",
+    "database": "SQLite 3 with Write-Ahead Logging (data/jarvis_operational.db)",
+    "remoteGateway": "Telegram Bot Long Polling / Webhook",
+    "diagnostics": "Server-Sent Events (SSE) Live Telemetry Stream"
+  },
+  "scripts": {
+    "install": "scripts/install-windows.ps1",
+    "start": "scripts/start-windows.ps1",
+    "stop": "scripts/stop-windows.ps1",
+    "update": "scripts/update-windows.ps1",
+    "healthCheck": "scripts/health-check.ps1",
+    "backup": "scripts/backup-windows.ps1"
+  }
+}

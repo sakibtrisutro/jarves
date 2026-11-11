@@ -1,0 +1,6 @@
+{
+  "name": "JARVIS - Autonomous Executive AI Partner",
+  "description": "TRISUTRO Virtual CEO & Autonomous Executive AI Partner: Multi-agent orchestration, hybrid memory (Markdown + SQLite), multi-provider LLM routing, Telegram remote access, and business automation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

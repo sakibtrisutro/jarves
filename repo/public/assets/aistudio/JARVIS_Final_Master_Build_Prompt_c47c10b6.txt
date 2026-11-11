@@ -1,0 +1,1144 @@
+JARVIS AI — FINAL MASTER BUILD PROMPT
+
+Autonomous AI Intelligence Engine, Multi-User Personal Assistants, Voice System, Persistent Memory & Windows Local Production Server
+
+You are working on my existing JARVIS AI project.
+
+GitHub Repository: https://github.com/sakibtrisutro/jarves.git
+
+Google AI Studio is my exclusive development environment. The Windows
+laptop will be the permanent production runtime. GitHub will be the
+source-code repository.
+
+Your task is to inspect the existing repository, understand its
+architecture, and implement the requirements below directly into the
+existing project.
+
+This is an implementation task, NOT a planning-only task. Do not merely
+generate recommendations or a report. Modify the actual project files,
+implement the features, run available tests, and prepare the project for
+GitHub deployment and Windows installation.
+
+------------------------------------------------------------------------
+
+PART 1 — CRITICAL DEVELOPMENT RULES
+
+1.  Inspect the entire existing repository before changing anything.
+2.  Understand the existing architecture, frontend, backend, database,
+    authentication, providers, voice system, and runtime.
+3.  Preserve existing working features and UI wherever possible.
+4.  Do not unnecessarily rebuild the project or replace working
+    components.
+5.  Avoid hardcoded providers, model names, API configurations, user
+    identities, and runtime assumptions.
+6.  Use modular architecture with clear service boundaries.
+7.  Do not create duplicate services, conflicting configuration stores,
+    or multiple competing model-selection systems.
+8.  Maintain compatibility with the existing application wherever
+    technically possible.
+9.  Do not expose API keys, passwords, tokens, or private user data in
+    logs, frontend bundles, or GitHub.
+10. Do not claim that a feature works unless it has actually been
+    tested.
+11. Do not claim that the project is 100% production-ready without
+    passing the relevant tests.
+12. Maintain a changelog and implementation report.
+
+Before implementation, create a baseline backup or a recoverable Git
+checkpoint.
+
+PART 2 — CORE ARCHITECTURE
+
+Build JARVIS as a modular, locally hosted AI assistant platform.
+
+The architecture must separate:
+
+-   Development Environment
+-   Frontend Application
+-   Backend API Server
+-   AI Intelligence Engine
+-   Model Routing Engine
+-   Provider Adapters
+-   Voice Processing Engine
+-   User Authentication
+-   Persistent Memory
+-   Local Database
+-   Agent Runtime
+-   Background Services
+-   Diagnostics and Logging
+-   Windows Runtime and Installation
+
+Google AI Studio is only the development and testing environment.
+
+The actual production application must be capable of running
+independently on my Windows laptop.
+
+Do not make the application dependent on Google AI Studio remaining
+open.
+
+Do not require Google AI Studio to execute ordinary user conversations
+after local installation.
+
+PART 3 — JARVIS AUTONOMOUS MODEL INTELLIGENCE ENGINE
+
+This is one of the most important requirements.
+
+Create a dedicated, independent JARVIS Model Intelligence Engine inside
+the application.
+
+This must be JARVIS’s own intelligence and model-management subsystem,
+not simply a dropdown containing a predefined list of models.
+
+3.1 Provider Management
+
+Provide a central API Provider Settings section.
+
+Initially support:
+
+-   OpenRouter
+-   Google Gemini
+-   Other providers through a modular adapter architecture
+
+The architecture must allow additional providers without rewriting the
+main AI system.
+
+For each provider, support:
+
+-   Provider selection
+-   API key entry
+-   Connection verification
+-   Model catalog discovery
+-   Provider status
+-   API usage information when available
+-   Error diagnostics
+-   Secure credential storage
+
+Do not hardcode Gemini as the default runtime provider.
+
+3.2 OpenRouter Free Mode
+
+Create a dedicated OpenRouter Free mode.
+
+Expected workflow:
+
+1.  User selects OpenRouter.
+2.  User enters an API key.
+3.  User clicks Fetch / Verify.
+4.  JARVIS retrieves the available model catalog.
+5.  JARVIS analyzes model metadata.
+6.  JARVIS identifies verified free model variants.
+7.  JARVIS builds and updates its own Free Model Registry.
+8.  JARVIS automatically chooses the best available model for each task.
+
+The user should NOT have to manually select individual models.
+
+Use the official OpenRouter model catalog endpoint:
+
+GET https://openrouter.ai/api/v1/models
+
+Inspect the actual API response schema before implementing filtering.
+
+3.3 Strict Free-Only Policy
+
+This requirement is mandatory.
+
+When Free Mode is enabled:
+
+-   Never silently use a paid model.
+-   Never fall back to a paid model.
+-   Never assume a model is free simply because its name contains the
+    word “free”.
+-   Check input and output pricing metadata.
+-   Prefer verified explicit free variants such as models identified by
+    the provider as free variants.
+-   Check model availability and supported capabilities.
+-   Distinguish verified free models from zero-priced models that may
+    have account eligibility conditions.
+-   Record rate limits and restrictions whenever reliable information is
+    available.
+
+If a free model becomes unavailable, choose another verified free model.
+
+If no eligible free model is available, report that no eligible free
+model is currently available.
+
+Never switch to paid usage without explicit user authorization.
+
+The system must make its free-only policy enforceable at the backend
+request-routing level, not just through frontend settings.
+
+3.4 Independent Model Intelligence Database
+
+Create a persistent Model Registry.
+
+Store information such as:
+
+-   Provider
+-   Model ID
+-   Display name
+-   Free or paid classification
+-   Input pricing
+-   Output pricing
+-   Context window
+-   Supported modalities
+-   Tool/function calling support
+-   Reasoning capability
+-   Coding capability
+-   Multilingual capability
+-   Availability
+-   Rate limits
+-   Last verified time
+-   Data source
+-   Confidence level
+-   Historical performance
+-   Success rate
+-   Average response time
+-   Failure rate
+-   Cooldown status
+
+The database must support model discovery, updates, comparison, ranking,
+and automatic selection.
+
+Do not store unsupported assumptions as verified facts.
+
+If a ranking, free quota, or capability cannot be reliably determined,
+mark it as Unknown or Estimated.
+
+3.5 Global Model Ranking and Performance Intelligence
+
+JARVIS should continuously evaluate which models are better for
+different tasks.
+
+Consider trustworthy information from:
+
+-   Official provider documentation
+-   Model catalog metadata
+-   Public benchmark sources
+-   Reliable model evaluation platforms
+-   Provider-reported performance data
+-   JARVIS’s own measured performance
+
+Evaluate different task categories separately:
+
+-   General conversation
+-   Complex reasoning
+-   Coding
+-   Debugging
+-   Instruction following
+-   Long-context processing
+-   Bangla communication
+-   English communication
+-   Multilingual communication
+-   Tool calling
+-   Agent orchestration
+
+Do not assume that one model is best at every task.
+
+Use task-specific scoring and weighted decision-making.
+
+Keep external benchmark rankings separate from JARVIS’s own measured
+performance.
+
+The system should maintain its own performance history and confidence
+scores.
+
+3.6 Automatic Model Selection and Routing
+
+The user should not have to select a model or language manually.
+
+JARVIS should automatically:
+
+1.  Understand the user’s request.
+2.  Identify the task category.
+3.  Estimate the task’s complexity.
+4.  Determine the required capabilities.
+5.  Identify eligible models.
+6.  Compare their performance, restrictions, pricing, and availability.
+7.  Select the most suitable model.
+8.  Route the request.
+9.  Measure the result.
+10. Update its internal performance records.
+
+Prioritize the following by default:
+
+-   Free models when Free Mode is enabled.
+-   Strong task-specific performance.
+-   Reliability.
+-   Good Bangla and multilingual performance.
+-   Appropriate context capacity.
+-   Low latency.
+-   Tool compatibility.
+
+Do not choose a model solely because it has the highest public benchmark
+score.
+
+3.7 Automatic Fallback and Recovery
+
+Implement an intelligent fallback system.
+
+When a selected model fails:
+
+-   Detect the failure type.
+-   Determine whether retrying is appropriate.
+-   Avoid excessive retries.
+-   Apply cooldowns to temporarily unavailable models.
+-   Select the next eligible model.
+-   Preserve the original conversation context.
+-   Continue the request when possible.
+-   Record the failure and fallback event.
+
+Classify errors including:
+
+-   HTTP 400
+-   HTTP 401
+-   HTTP 402
+-   HTTP 403
+-   HTTP 404
+-   HTTP 429
+-   HTTP 500
+-   HTTP 502
+-   HTTP 503
+-   HTTP 504
+-   Network timeout
+-   Connection failure
+-   Invalid model
+-   Context limit
+-   Provider outage
+
+Do not retry authentication failures indefinitely.
+
+Do not use paid fallback models when Free Mode is enabled.
+
+3.8 Continuous Model Intelligence Updates
+
+The registry must remain updated.
+
+Implement configurable scheduled discovery and refresh.
+
+For example:
+
+-   Refresh model catalog periodically.
+-   Recheck pricing metadata.
+-   Recheck availability.
+-   Recheck model capabilities.
+-   Identify new models.
+-   Identify deprecated models.
+-   Update model performance scores.
+-   Preserve historical evaluation data.
+
+Do not repeatedly query providers unnecessarily.
+
+Use reasonable refresh intervals, caching, and rate limiting.
+
+The user should be able to see when model information was last updated.
+
+PART 4 — USER CONTROLLED INTELLIGENCE SETTINGS
+
+The user should not have to manually manage model selection, language,
+or routing.
+
+Create a simple interface for:
+
+-   Active API provider
+-   API key
+-   Verify connection
+-   Fetch model information
+-   Automatic Intelligence Mode
+-   Free-only mode
+-   User Instructions
+-   Intelligence Priority Settings
+
+Provide a natural-language instruction area.
+
+Examples:
+
+“Always prioritize free models.”
+
+“Prefer models that understand Bangla accurately.”
+
+“Use the strongest reasoning model for complex coding tasks.”
+
+“Prioritize response quality over speed.”
+
+“Do not use a paid model without asking me.”
+
+JARVIS must translate these instructions into its internal routing
+preferences.
+
+Provide a way to inspect the active model and understand why it was
+selected.
+
+Allow the user to override automatic priorities when needed.
+
+Do not require manual model selection as the normal workflow.
+
+PART 5 — FIX PROVIDER AND MODEL SWITCHING
+
+There is an existing critical bug where saving a different provider, API
+key, or model does not always change the actual runtime model.
+
+Investigate and fix this completely.
+
+Implement one authoritative active provider configuration.
+
+When the user saves new settings:
+
+1.  Validate the provider.
+2.  Validate the API key when possible.
+3.  Validate the selected provider configuration.
+4.  Persist the configuration.
+5.  Synchronize frontend and backend state.
+6.  Reinitialize the active provider adapter.
+7.  Invalidate stale model caches.
+8.  Update the runtime configuration.
+9.  Confirm which provider is actually active.
+10. Use the new provider for the next request.
+
+Remove conflicting hardcoded Gemini defaults and stale configuration
+overrides.
+
+The active runtime provider must always match the saved configuration.
+
+Add automated tests for provider switching.
+
+PART 6 — MULTI-USER PERSONAL ASSISTANT SYSTEM
+
+Create two initial user accounts.
+
+User 1
+
+Username: Sakib
+
+Temporary initial password: 1234
+
+Assistant voice personality: Male
+
+User 2
+
+Username: Sanjida
+
+Temporary initial password: 1234
+
+Assistant voice personality: Female
+
+These are the initial test credentials only.
+
+Do not use the users’ phone numbers as passwords unless they explicitly
+change their credentials later.
+
+6.1 Authentication
+
+Implement:
+
+-   Login
+-   Logout
+-   Password change
+-   Session management
+-   Secure password hashing
+-   Protected backend routes
+-   Session expiration
+-   Login validation
+-   User-specific settings
+
+Never store passwords in plaintext.
+
+Never expose password hashes to frontend code.
+
+Require each user to change the initial temporary password after their
+first login.
+
+The user should be able to log out and change their password from the
+account menu.
+
+6.2 Separate Personal Assistants
+
+Each account must have its own personal assistant context.
+
+For Sakib:
+
+-   Separate conversations
+-   Separate memory
+-   Separate preferences
+-   Male voice by default
+-   Personal instructions
+
+For Sanjida:
+
+-   Separate conversations
+-   Separate memory
+-   Separate preferences
+-   Female voice by default
+-   Personal instructions
+
+When Sanjida logs in, JARVIS should act as her own personal assistant.
+
+It should learn her preferences from permitted interactions and follow
+her instructions.
+
+When Sakib logs in, JARVIS should act according to Sakib’s own context.
+
+Do not share private memories, conversation history, personal
+preferences, or user-specific information between accounts.
+
+The two assistants may use the same backend infrastructure and AI
+providers, but their personal contexts must remain isolated.
+
+Do not permanently hardcode the assistant’s display name. Keep it
+configurable for future customization.
+
+PART 7 — PERSISTENT MEMORY SYSTEM
+
+Create a proper memory architecture.
+
+The memory system must be stored locally on the Windows laptop.
+
+Implement at least the following:
+
+7.1 Short-Term Memory
+
+Maintain active conversation context.
+
+Support context continuity across multiple messages.
+
+Handle context-window limits intelligently.
+
+7.2 Long-Term Personal Memory
+
+Store useful information from previous conversations.
+
+Examples:
+
+-   User preferences
+-   Important instructions
+-   Ongoing projects
+-   Personal workflows
+-   Frequently used information
+-   Relevant interaction history
+
+Memory must be user-specific.
+
+7.3 Knowledge and Experience Memory
+
+Store:
+
+-   Previous task outcomes
+-   Model performance history
+-   Agent execution history
+-   Useful operational knowledge
+-   User-approved lessons
+-   Important system decisions
+
+7.4 Memory Controls
+
+Provide:
+
+-   Memory viewing
+-   Search
+-   Editing
+-   Deleting
+-   Memory enable/disable
+-   User-specific memory management
+-   Export and backup
+
+Do not automatically treat every conversation as permanent memory.
+
+Use sensible memory extraction and retention rules.
+
+Allow users to correct or delete incorrect memories.
+
+7.5 Local Data Ownership
+
+All persistent user data should remain on the laptop by default.
+
+Use a proper persistent database.
+
+Select the database architecture based on the existing project and
+expected future expansion.
+
+SQLite may be appropriate initially, but keep the database layer modular
+so it can later migrate to PostgreSQL or another suitable database.
+
+Keep database files, memory files, user uploads, logs, backups, and
+runtime data in a clearly defined persistent data directory.
+
+Never store persistent user data inside temporary build folders.
+
+Never delete existing user data during an ordinary application update.
+
+PART 8 — VOICE SYSTEM REPAIR AND IMPROVEMENT
+
+The existing JARVIS voice system has a critical microphone input
+problem.
+
+JARVIS cannot reliably hear the user.
+
+Investigate the actual root cause and fix it.
+
+Do not merely change the AI model and assume the microphone issue is
+solved.
+
+8.1 Microphone Input
+
+Implement and verify:
+
+-   Microphone permission handling
+-   Audio capture
+-   Audio stream initialization
+-   Device selection
+-   Speech recognition
+-   Recognition error handling
+-   Microphone availability detection
+-   Retry after permission denial
+-   Clear microphone status
+
+If permission is missing, request it through the browser’s supported
+permission flow after an appropriate user interaction.
+
+If the browser blocks microphone access because the page is not in a
+secure context, explain the issue and provide a supported HTTPS or
+trusted-origin solution.
+
+Do not attempt to bypass browser security.
+
+8.2 Main Dashboard Voice Controls
+
+The main control panel must have accessible controls for:
+
+-   Start Listening
+-   Stop Listening
+-   Push-to-Talk
+-   Continuous Listening
+-   Mute Microphone
+-   Unmute Microphone
+-   Stop Speaking
+-   Interrupt Assistant
+-   Replay Response
+
+The existing missing Stop Speaking control must be implemented.
+
+Do not leave decorative or nonfunctional voice buttons.
+
+8.3 Voice Personality
+
+Sakib receives male voice by default.
+
+Sanjida receives female voice by default.
+
+Keep the actual speech engine configurable.
+
+Do not hardcode a specific Gemini voice or provider into the entire
+voice system.
+
+Keep these independent:
+
+-   Speech-to-Text
+-   Language Detection
+-   LLM
+-   Text-to-Speech
+
+JARVIS should automatically detect Bangla and English and respond
+appropriately.
+
+Do not require users to manually select their language.
+
+PART 9 — WINDOWS LOCAL PRODUCTION RUNTIME
+
+The final application must run on my Windows laptop independently.
+
+Create a proper Windows-compatible runtime architecture.
+
+9.1 Installation Package
+
+The GitHub repository must contain everything required to install the
+application.
+
+Create appropriate files such as:
+
+-   install.bat
+-   start.bat
+-   stop.bat
+-   restart.bat
+-   update.bat
+-   diagnostics.bat
+-   backup.bat
+-   restore.bat
+-   uninstall.bat
+
+Use appropriate PowerShell scripts where necessary.
+
+Do not create scripts blindly. Adapt them to the actual project
+architecture.
+
+9.2 Automatic Dependency Installation
+
+When I download and extract the GitHub ZIP:
+
+1.  I run the installer.
+2.  It checks the Windows environment.
+3.  It checks required runtimes.
+4.  It installs missing supported runtimes or provides a clear
+    installation path.
+5.  It installs project dependencies from package manifests and
+    lockfiles.
+6.  It creates necessary configuration files.
+7.  It initializes the local database.
+8.  It creates persistent data directories.
+9.  It checks required ports.
+10. It validates the installation.
+11. It provides instructions to start the JARVIS server.
+
+Do not include node_modules in the repository ZIP.
+
+Do not depend on Google AI Studio or development-only services after
+local installation.
+
+If any external dependency is unavailable, report it clearly rather than
+pretending installation succeeded.
+
+9.3 Local Server
+
+Implement:
+
+-   Start server
+-   Stop server
+-   Restart server
+-   Health check
+-   Runtime status
+-   Port configuration
+-   Process monitoring
+-   Graceful shutdown
+-   Persistent storage
+
+The server must support access through the laptop’s LAN IP address.
+
+For example:
+
+http://192.168.x.x:PORT
+
+Use the actual dynamically detected LAN IP and configured port.
+
+Do not hardcode an example IP.
+
+The user should be able to access JARVIS from other devices connected to
+the same local network.
+
+9.4 Windows Startup Option
+
+Automatic startup is NOT enabled by default.
+
+Provide an option in Settings:
+
+“Start JARVIS automatically when Windows starts”
+
+The user can enable or disable this whenever needed.
+
+Implement the setting using a supported Windows startup mechanism.
+
+Also provide a way to disable it.
+
+Do not require startup registration during the initial testing
+installation.
+
+9.5 Firewall Configuration
+
+Provide a dedicated Windows firewall setup script.
+
+The script should:
+
+-   Identify the actual server port.
+-   Request the necessary Windows authorization.
+-   Create an appropriate inbound rule.
+-   Restrict exposure to the appropriate private network profile where
+    possible.
+-   Avoid unnecessarily opening unrelated ports.
+-   Explain what the user is approving.
+
+If Windows requires administrator privileges, request them through the
+supported Windows process.
+
+Do not bypass Windows Firewall security.
+
+The user should be able to remove the rule through an uninstall or
+firewall cleanup option.
+
+9.6 Local Network Security
+
+LAN access must require authentication.
+
+Implement:
+
+-   Secure password hashing
+-   Session protection
+-   Authentication middleware
+-   Appropriate CORS configuration
+-   CSRF protection where applicable
+-   Secure cookie settings
+-   Request validation
+-   Rate limiting
+-   Protection against unauthorized access
+
+Do not expose the server publicly by default.
+
+External tunneling, Ngrok, Cloudflare Tunnel, public domains, and global
+deployment are outside the current scope.
+
+Prepare the architecture for future external access without enabling it
+now.
+
+PART 10 — MOBILE WEB APP AND OPTIONAL ANDROID APK
+
+I primarily want to use JARVIS from my phone.
+
+Create a dedicated mobile-friendly experience.
+
+10.1 Progressive Web App
+
+Implement a proper PWA where compatible with the existing frontend.
+
+Include:
+
+-   Web app manifest
+-   Application icons
+-   Installable Home Screen experience
+-   Mobile responsive UI
+-   App-like navigation
+-   Appropriate offline fallback
+-   Secure session handling
+-   Microphone permission support
+-   Connection status
+-   LAN server address configuration if needed
+
+The PWA must connect to the JARVIS backend running on the laptop.
+
+Do not create a separate disconnected assistant.
+
+10.2 Optional Android APK
+
+If technically feasible, prepare an Android application package using an
+appropriate technology such as Capacitor or another compatible approach.
+
+Create a separate folder for Android packaging and documentation.
+
+The APK should connect to the same JARVIS backend.
+
+Do not create a second independent database or AI engine.
+
+Test:
+
+-   LAN connectivity
+-   Login
+-   Voice input
+-   Audio output
+-   Session handling
+-   Reconnection
+-   Network failure handling
+
+If an APK cannot be built and verified in the current environment,
+provide the complete build configuration and exact instructions.
+
+Do not claim an APK has been generated unless the actual APK file exists
+and has been verified.
+
+The PWA must remain the primary mobile solution if APK generation is not
+practical.
+
+PART 11 — DIAGNOSTICS AND LOGGING
+
+Create a proper Logs and Diagnostics section.
+
+Record important events such as:
+
+-   User login/logout
+-   Provider connection
+-   Model discovery
+-   Model selection
+-   Model fallback
+-   API errors
+-   Voice input errors
+-   Microphone permission issues
+-   Speech recognition errors
+-   Memory operations
+-   Database operations
+-   Agent execution
+-   Runtime startup/shutdown
+-   Network failures
+
+Include:
+
+-   Timestamp
+-   Event category
+-   Severity
+-   Correlation ID
+-   Error code
+-   Useful technical details
+-   Stack trace when appropriate
+
+Never log raw API keys, passwords, access tokens, or unnecessary private
+conversation content.
+
+Provide filtering, search, export, and log retention controls.
+
+PART 12 — FUTURE MULTI-AGENT ARCHITECTURE
+
+I will create additional agents in the future, and those agents will
+also run on the same Windows laptop.
+
+Prepare the architecture for:
+
+-   Agent registration
+-   Agent identity
+-   Agent configuration
+-   Agent execution
+-   Agent-specific memory
+-   Task delegation
+-   Tool access control
+-   Agent status
+-   Execution history
+-   Agent logs
+-   Resource management
+
+Do not unnecessarily build a large multi-agent ecosystem now.
+
+Create the modular foundation so future agents can be added without
+rebuilding JARVIS.
+
+Each agent must respect user permissions and memory isolation.
+
+PART 13 — LOCAL DATA, BACKUP AND UPDATE SAFETY
+
+This is essential.
+
+My laptop will be the primary owner of the data.
+
+Implement:
+
+-   Persistent database storage
+-   User memory storage
+-   Conversation storage
+-   Model intelligence registry
+-   Agent data storage
+-   User uploads
+-   Logs
+-   Backup and restore
+-   Database migration support
+
+Keep application code and user data separate.
+
+Updating the GitHub project must never automatically erase existing user
+data.
+
+Never perform a destructive database reset during a normal update.
+
+Create migration and recovery procedures.
+
+Provide a backup before any potentially destructive migration.
+
+Keep API keys and local secrets outside the public GitHub repository.
+
+Provide a safe .env.example without real credentials.
+
+PART 14 — TESTING AND ACCEPTANCE CRITERIA
+
+Do not finish after merely writing code.
+
+Run all available automated checks.
+
+Add missing tests where practical.
+
+Test these areas independently.
+
+A. Provider and Intelligence
+
+-   OpenRouter connection
+-   Model catalog retrieval
+-   Free model classification
+-   Free-only enforcement
+-   Automatic model selection
+-   Fallback
+-   Provider switching
+-   Model configuration persistence
+-   Registry refresh
+-   Model ranking and task-based selection
+
+B. Authentication and Memory
+
+-   Sakib login
+-   Sanjida login
+-   Temporary password change
+-   Logout
+-   Session handling
+-   Memory isolation
+-   Conversation isolation
+-   Persistent data after server restart
+
+C. Voice
+
+-   Microphone permission flow
+-   Microphone detection
+-   Audio capture
+-   Speech recognition
+-   Bangla speech
+-   English speech
+-   Male voice for Sakib
+-   Female voice for Sanjida
+-   Stop Speaking
+-   Mute
+-   Interrupt
+-   Device selection
+
+D. Windows Runtime
+
+-   Fresh installation
+-   Dependency installation
+-   Database initialization
+-   Server start
+-   Server stop
+-   Server restart
+-   Persistent storage
+-   Firewall configuration
+-   LAN connectivity
+-   Startup setting enabled/disabled
+
+E. Mobile
+
+-   Mobile browser access
+-   PWA installation
+-   Login from phone
+-   Voice interaction
+-   Session continuity
+-   LAN reconnection
+
+APK tests should only be marked complete if a real APK has been built
+and tested.
+
+Test Reporting
+
+For every test, record:
+
+-   Test name
+-   Expected result
+-   Actual result
+-   Pass/Fail/Not Tested
+-   Error details
+-   Relevant log reference
+
+Never mark a test Passed without actually executing it.
+
+Distinguish:
+
+1.  Tests passed in Google AI Studio.
+2.  Tests passed in the local development environment.
+3.  Tests that still require execution on my Windows laptop.
+4.  Tests that require an actual mobile device.
+
+PART 15 — GITHUB WORKFLOW
+
+After implementation:
+
+1.  Review all changed files.
+2.  Verify there are no accidental secrets.
+3.  Verify installation scripts.
+4.  Verify database migrations.
+5.  Verify package manifests and lockfiles.
+6.  Run the available test suite.
+7.  Check the build.
+8.  Prepare a clear changelog.
+9.  Prepare Windows installation documentation.
+10. Prepare mobile access documentation.
+
+Attempt to connect to the GitHub repository through the authorized
+GitHub integration available in the development environment.
+
+If authorization is needed, request it through the official GitHub
+authorization flow.
+
+Once authorized, commit and push the actual changes to the repository.
+
+Do not bypass authentication.
+
+Do not claim a push succeeded unless the repository confirms it.
+
+If direct GitHub push is unavailable, provide the exact changed files
+and a clear alternative workflow.
+
+PART 16 — REQUIRED PROJECT DOCUMENTATION
+
+Create or update these documents:
+
+-   README.md
+-   INSTALLATION_WINDOWS.md
+-   MOBILE_ACCESS.md
+-   API_PROVIDER_GUIDE.md
+-   MODEL_INTELLIGENCE_ENGINE.md
+-   MEMORY_ARCHITECTURE.md
+-   VOICE_SETUP.md
+-   BACKUP_RESTORE.md
+-   TROUBLESHOOTING.md
+-   CHANGELOG.md
+
+Explain how to install, start, stop, update, back up, restore, and
+access JARVIS from a phone.
+
+PART 17 — CURRENT SCOPE EXCLUSIONS
+
+Do NOT implement Telegram integration in this task.
+
+Do NOT configure public internet access or tunneling yet.
+
+Do NOT enable Windows automatic startup by default.
+
+Do NOT require manual model selection.
+
+Do NOT require manual language selection.
+
+Do NOT introduce paid model usage in Free Mode.
+
+Do NOT create separate disconnected mobile and desktop assistants.
+
+Do NOT overwrite existing user data.
+
+PART 18 — FINAL DELIVERY REQUIREMENTS
+
+The final deliverable must be a working project in the existing GitHub
+repository, prepared for Windows local installation.
+
+When implementation is complete, provide a concise but technically
+accurate completion report containing:
+
+1.  Existing architecture discovered.
+2.  Files created and modified.
+3.  Features actually implemented.
+4.  Features actually tested.
+5.  Tests passed.
+6.  Tests failed.
+7.  Tests that still require the Windows laptop.
+8.  GitHub commit and push status.
+9.  Exact ZIP installation procedure.
+10. Exact Windows server startup procedure.
+11. LAN access instructions.
+12. Default test login instructions.
+13. How to enable Windows automatic startup later.
+14. PWA and APK status.
+15. Known limitations and next steps.
+
+FINAL EXECUTION INSTRUCTION
+
+Start by inspecting the existing GitHub-connected project.
+
+Do not stop after creating a plan.
+
+Implement the system in the existing architecture.
+
+Prioritize correctness, data safety, real functionality, modularity, and
+maintainability over superficial UI changes.
+
+My objective is to install JARVIS on my Windows laptop, run it as my own
+persistent local AI assistant server, access it from my phone over my
+private network, and eventually host additional agents on the same
+laptop.
+
+Build the foundation correctly now so that future expansion does not
+require rebuilding the entire application.
+
+The Windows laptop is the permanent production home of JARVIS. Google AI
+Studio is only the development and testing ground.
