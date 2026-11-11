@@ -15,20 +15,36 @@ import {
   initModelRegistry,
 } from './model_registry.ts';
 import { getUserMemories, saveUserMemory, deleteUserMemory, getEpisodicMemories, recordEvent } from './memory.ts';
-import { hashPassword, verifyPassword, createSession, verifySession, revokeSession } from './auth.ts';
+import { 
+  hashPassword, 
+  verifyPassword, 
+  createSession, 
+  verifySession, 
+  revokeSession,
+  revokeUserSessions,
+  getUserActiveSessions,
+  parseCookies,
+  formatSessionCookie,
+  formatClearCookie
+} from './auth.ts';
 import { getDb } from './database.ts';
 
 export const apiRouter = Router();
 
 /**
- * Auth Middleware
+ * Auth Middleware with HttpOnly Cookie & Bearer Token support
  */
 const authGuard = (req: Request, res: Response, next: any) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieToken = cookies['jarvis_session'];
+  const headerToken = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null;
+  const token = cookieToken || headerToken;
+  
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   const session = verifySession(token);
   if (!session) return res.status(401).json({ error: 'Session expired or invalid' });
   (req as any).user = session;
+  (req as any).token = token;
   next();
 };
 
@@ -49,8 +65,18 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
+    // Seamless migration to scrypt if old hash format
+    if (!user.password_hash.startsWith('scrypt:')) {
+      const upgradedHash = hashPassword(password);
+      db.prepare('UPDATE users SET password_hash = ?, updated_at = datetime("now") WHERE username = ?').run(upgradedHash, username);
+      logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Migrated password to scrypt: ${username}` });
+    }
+
     const session = createSession(user.username, rememberMe === true);
     if (!session) throw new Error('Failed to create session');
+
+    const isSecure = req.secure || process.env.NODE_ENV === 'production';
+    res.setHeader('Set-Cookie', formatSessionCookie(session.token, rememberMe === true, isSecure));
 
     logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `User login: ${username}` });
     res.json({ 
@@ -62,7 +88,8 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
         role: user.role, 
         voicePersonality: user.voice_personality, 
         mustChangePassword: user.must_change_password === 1,
-        email: user.email
+        email: user.email,
+        recoveryEmail: user.recovery_email
       } 
     });
   } catch (err: any) {
@@ -78,33 +105,167 @@ apiRouter.post('/auth/change-password', (req: Request, res: Response) => {
   if (!db) return res.status(500).json({ error: 'Database unavailable' });
 
   try {
-    // If not a first-login scenario, we should ideally check current password
-    // For now, let's just allow it for simplicity as per previous logic, but with more safety
     const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // If current password provided, verify it
+    if (currentPassword && !verifyPassword(currentPassword, user.password_hash)) {
+      return res.status(401).json({ error: 'Current password verification failed' });
+    }
 
     const newHash = hashPassword(newPassword);
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime("now") WHERE username = ?').run(newHash, username);
     
+    // Automatically issue a valid session so the user can immediately continue without getting stuck
+    const session = createSession(username, true);
+    if (session) {
+      const isSecure = req.secure || process.env.NODE_ENV === 'production';
+      res.setHeader('Set-Cookie', formatSessionCookie(session.token, true, isSecure));
+    }
+
     logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Password changed for user: ${username}` });
-    res.json({ success: true, message: 'Password updated successfully' });
+    res.json({ 
+      success: true, 
+      message: 'Password updated successfully',
+      token: session?.token,
+      user: {
+        username: user.username,
+        role: user.role,
+        voicePersonality: user.voice_personality,
+        mustChangePassword: false,
+        email: user.email
+      }
+    });
   } catch (err: any) {
     console.error('Password change error:', err);
     res.status(500).json({ error: `Internal server error: ${err.message}` });
   }
 });
 
+apiRouter.post('/auth/forgot-password', (req: Request, res: Response) => {
+  const { email, username } = req.body;
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+  // Check SMTP configuration status
+  let smtpConfigured = Boolean(process.env.SMTP_HOST || process.env.SMTP_USER);
+  try {
+    const row = db.prepare('SELECT value_json FROM settings WHERE key = "smtp"').get() as any;
+    if (row?.value_json) {
+      const cfg = JSON.parse(row.value_json);
+      if (cfg.host && cfg.port) smtpConfigured = true;
+    }
+  } catch {}
+
+  if (!smtpConfigured) {
+    // Explicitly never pretend an email was sent when SMTP is not configured
+    return res.status(503).json({
+      success: false,
+      configured: false,
+      error: 'SMTP email recovery service is not configured on this host. Please configure SMTP credentials in Settings Center before using email recovery.'
+    });
+  }
+
+  // If configured, create a secure recovery token
+  const crypto = require('node:crypto');
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+
+  try {
+    db.prepare('INSERT INTO password_resets (email, token_hash, expires_at, created_at) VALUES (?, ?, ?, datetime("now"))').run(email, tokenHash, expiresAt);
+    logEvent({ level: 'INFO', category: 'SECURITY', component: 'AuthManager', message: `Password reset token generated for ${email}` });
+    res.json({ success: true, message: 'Recovery email dispatched via configured SMTP relay.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/auth/reset-password', (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword || newPassword.length < 4) return res.status(400).json({ error: 'Invalid reset payload' });
+
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+  const crypto = require('node:crypto');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const now = new Date().toISOString();
+
+  try {
+    const reset = db.prepare('SELECT * FROM password_resets WHERE token_hash = ? AND expires_at > ?').get(tokenHash, now) as any;
+    if (!reset) return res.status(400).json({ error: 'Invalid or expired recovery token' });
+
+    const user = db.prepare('SELECT username FROM users WHERE email = ? OR recovery_email = ?').get(reset.email, reset.email) as any;
+    if (!user) return res.status(404).json({ error: 'No associated user found' });
+
+    const newHash = hashPassword(newPassword);
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime("now") WHERE username = ?').run(newHash, user.username);
+    db.prepare('DELETE FROM password_resets WHERE token_hash = ?').run(tokenHash);
+
+    res.json({ success: true, message: 'Password reset successfully. You may now log in.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/auth/email', authGuard, (req: Request, res: Response) => {
+  const { email, recoveryEmail } = req.body;
+  const user = (req as any).user;
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+  try {
+    db.prepare('UPDATE users SET email = ?, recovery_email = ?, updated_at = datetime("now") WHERE username = ?').run(email || null, recoveryEmail || null, user.username);
+    res.json({ success: true, message: 'Account email configuration updated' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.get('/auth/sessions', authGuard, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const sessions = getUserActiveSessions(user.username);
+  res.json({ sessions, currentSessionId: user.id });
+});
+
+apiRouter.delete('/auth/sessions/:id', authGuard, (req: Request, res: Response) => {
+  const db = getDb();
+  const user = (req as any).user;
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+  try {
+    db.prepare('DELETE FROM sessions WHERE id = ? AND username = ?').run(req.params.id, user.username);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.post('/auth/sessions/revoke-others', authGuard, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  revokeUserSessions(user.username, user.id);
+  res.json({ success: true, message: 'All other sessions revoked.' });
+});
+
 apiRouter.post('/auth/logout', (req: Request, res: Response) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies['jarvis_session'] || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
   if (token) revokeSession(token);
+  res.setHeader('Set-Cookie', formatClearCookie());
   res.json({ success: true });
 });
 
 apiRouter.get('/auth/me', authGuard, (req: Request, res: Response) => {
   const user = (req as any).user;
   const db = getDb();
-  const userData = db?.prepare('SELECT username, role, voice_personality, email, must_change_password FROM users WHERE username = ?').get(user.username) as any;
-  res.json({ user: { ...userData, mustChangePassword: userData.must_change_password === 1 } });
+  const userData = db?.prepare('SELECT username, role, voice_personality, email, recovery_email, must_change_password FROM users WHERE username = ?').get(user.username) as any;
+  res.json({ 
+    user: { 
+      ...userData, 
+      mustChangePassword: userData?.must_change_password === 1 
+    },
+    token: (req as any).token 
+  });
 });
 
 // -------------------------------------------------------------
@@ -319,12 +480,237 @@ apiRouter.get('/conversations', authGuard, (req: Request, res: Response) => {
 });
 
 apiRouter.get('/agents', authGuard, (req: Request, res: Response) => {
-  // Discovery logic for agents in /repo/agents or equivalent
   const agents = [
-    { id: 'coding_agent', name: 'Dev-Ops Engine', description: 'Advanced code analysis and workspace modification.', status: 'READY', capabilities: ['Code Writing', 'Refactoring', 'Bug Hunting'] },
-    { id: 'executive_partner', name: 'Strategic Partner', description: 'Business logic orchestration and high-level decision support.', status: 'ONLINE', capabilities: ['Strategy', 'Reporting', 'Approval Management'] }
+    {
+      id: 'partner',
+      name: 'Partner (Virtual CEO)',
+      role: 'Central Coordinator & Orchestrator',
+      description: 'Strategic leadership, task prioritization, project planning, approvals, QC, and evidence reporting.',
+      status: 'ONLINE',
+      permissionTier: 'tier2',
+      capabilities: ['Strategic Leadership', 'Multi-Agent Delegation', 'Approval Management', 'Evidence QC'],
+      allowedTools: ['task_dispatch', 'agent_coordinate', 'qc_review', 'approval_manage', 'read_file']
+    },
+    {
+      id: 'software_dev',
+      name: 'Software Development Agent',
+      role: 'Specialist: Engineering & Dev-Ops',
+      description: 'Implementation, refactoring, unit testing, bug fixing, and continuous code quality.',
+      status: 'READY',
+      permissionTier: 'tier1',
+      capabilities: ['Code Synthesis', 'Bug Fixing', 'Test Execution', 'Refactoring'],
+      allowedTools: ['read_file', 'write_file', 'replace_file_content', 'run_command', 'git_diff', 'run_tests']
+    },
+    {
+      id: 'research',
+      name: 'Research & Intelligence Agent',
+      role: 'Specialist: Technical & Market Intelligence',
+      description: 'Technical and market investigations, source verification, and competitor benchmarking.',
+      status: 'ONLINE',
+      permissionTier: 'tier1',
+      capabilities: ['Web Intelligence', 'Fact Checking', 'Document Synthesis', 'Cost Analysis'],
+      allowedTools: ['web_search', 'fetch_webpage', 'parse_pdf', 'summarize_text']
+    },
+    {
+      id: 'content_planning',
+      name: 'Content Planning Agent',
+      role: 'Specialist: Editorial & Seasonal Strategy',
+      description: 'Omnichannel editorial calendar management, sales season alignment, and fashion trend monitoring.',
+      status: 'READY',
+      permissionTier: 'tier1',
+      capabilities: ['Editorial Calendar', 'Trend Tracking', 'Brief Drafting', 'Campaign Mapping'],
+      allowedTools: ['calendar_read', 'calendar_update', 'trend_analyzer']
+    },
+    {
+      id: 'data_analysis',
+      name: 'Data Analysis Agent',
+      role: 'Specialist: Analytics & Metrics',
+      description: 'Sales analytics, cart abandonment recovery tracking, ad ROI, and performance dashboards.',
+      status: 'READY',
+      permissionTier: 'tier1',
+      capabilities: ['ACID Querying', 'Data Aggregation', 'Visual Charting', 'CSV Export'],
+      allowedTools: ['sqlite_query', 'data_aggregate', 'chart_generate', 'export_csv']
+    },
+    {
+      id: 'website_mgmt',
+      name: 'Website Management Agent',
+      role: 'Specialist: E-Commerce & Uptime',
+      description: 'E-commerce site health monitoring, product catalog syncing, and cart recovery queue management.',
+      status: 'READY',
+      permissionTier: 'tier1',
+      capabilities: ['Health Check', 'Catalog Sync', 'Abandonment Tracking', 'Sitemap Ping'],
+      allowedTools: ['http_health_check', 'catalog_sync', 'cart_analytics_reader', 'sitemap_ping']
+    },
+    {
+      id: 'fb_automation',
+      name: 'Facebook Automation Agent',
+      role: 'Specialist: Facebook Page & Ads',
+      description: 'Facebook page management, post scheduling, comment triage, and audience insights.',
+      status: 'IDLE',
+      permissionTier: 'tier1',
+      capabilities: ['Post Drafting', 'Comment Triage', 'Insights Retrieval'],
+      allowedTools: ['fb_publish_post', 'fb_read_comments', 'fb_reply_comment', 'fb_fetch_insights']
+    },
+    {
+      id: 'ig_automation',
+      name: 'Instagram Automation Agent',
+      role: 'Specialist: Visual Brand Presence',
+      description: 'Product showcases, visual carousel scheduling, customer DM triage, and media engagement.',
+      status: 'IDLE',
+      permissionTier: 'tier1',
+      capabilities: ['Visual Showcase', 'DM Triage', 'Media Analytics'],
+      allowedTools: ['ig_publish_media', 'ig_read_messages', 'ig_fetch_analytics']
+    },
+    {
+      id: 'yt_automation',
+      name: 'YouTube Automation Agent',
+      role: 'Specialist: Video SEO & Publishing',
+      description: 'Video metadata optimization, scheduled uploads, retention analysis, and chapter tagging.',
+      status: 'IDLE',
+      permissionTier: 'tier1',
+      capabilities: ['Video SEO', 'Metadata Generation', 'Retention Tracking'],
+      allowedTools: ['yt_upload_video', 'yt_update_metadata', 'yt_fetch_analytics']
+    },
+    {
+      id: 'video_production',
+      name: 'Video Production Agent',
+      role: 'Specialist: Video Synthesis & Reels',
+      description: 'Product script generation, showcase reel assembly, caption overlay, and branding.',
+      status: 'IDLE',
+      permissionTier: 'tier1',
+      capabilities: ['Script Writing', 'Reel Assembly', 'Caption Burning'],
+      allowedTools: ['script_generator', 'ffmpeg_render', 'tts_synthesizer', 'subtitle_burn']
+    },
+    {
+      id: 'image_processing',
+      name: 'Image Processing Agent',
+      role: 'Specialist: Asset Optimization',
+      description: 'Batch cropping, background removal, catalog card watermarking, and WebP compression.',
+      status: 'READY',
+      permissionTier: 'tier1',
+      capabilities: ['Batch Crop', 'Background Removal', 'Watermarking', 'WebP Conversion'],
+      allowedTools: ['sharp_resize', 'bg_remove', 'watermark_overlay', 'webp_convert']
+    }
   ];
   res.json({ agents });
+});
+
+apiRouter.get('/skills', authGuard, (req: Request, res: Response) => {
+  const skills = [
+    {
+      id: 'assistant',
+      name: 'Executive Assistant Skill',
+      description: 'Persona adaptation, tone management, executive briefings, and natural language command parsing.',
+      status: 'ACTIVE',
+      file: 'src/skills/assistant.py',
+      supportedAgents: ['partner']
+    },
+    {
+      id: 'github',
+      name: 'GitHub Skill',
+      description: 'Repository auditing, file tree inspection, commit log verification, and diff extraction.',
+      status: 'ACTIVE',
+      file: 'src/skills/github_skill.py',
+      supportedAgents: ['partner', 'software_dev']
+    },
+    {
+      id: 'memory',
+      name: 'Memory Engine Skill',
+      description: 'Semantic preference extraction, episodic interaction logging, and long-term context retention.',
+      status: 'ACTIVE',
+      file: 'src/skills/memory.py',
+      supportedAgents: ['partner', 'software_dev', 'research']
+    },
+    {
+      id: 'notes',
+      name: 'Notes & Scratchpad Skill',
+      description: 'Persistent memo drafting, structured documentation updates, and knowledge preservation.',
+      status: 'ACTIVE',
+      file: 'src/skills/notes.py',
+      supportedAgents: ['partner', 'content_planning']
+    },
+    {
+      id: 'research',
+      name: 'Research Skill',
+      description: 'Web intelligence retrieval, URL fetching, document summarization, and citation verification.',
+      status: 'ACTIVE',
+      file: 'src/skills/research.py',
+      supportedAgents: ['partner', 'research']
+    },
+    {
+      id: 'status',
+      name: 'System Status Skill',
+      description: 'Real-time diagnostic telemetry, WAL database health verification, and memory monitoring.',
+      status: 'ACTIVE',
+      file: 'src/skills/status.py',
+      supportedAgents: ['partner', 'software_dev']
+    },
+    {
+      id: 'tasks',
+      name: 'Tasks & Workflow Skill',
+      description: 'Task state transitions, schedule reconciliation, priority queues, and execution tracking.',
+      status: 'ACTIVE',
+      file: 'src/skills/tasks.py',
+      supportedAgents: ['partner', 'software_dev', 'data_analysis']
+    },
+    {
+      id: 'model_router',
+      name: 'Model Intelligence Router',
+      description: 'Latency ranking, dynamic model discovery, Strict Free Mode enforcement, and automated fallback pipeline.',
+      status: 'ACTIVE',
+      file: 'src/server/model_registry.ts',
+      supportedAgents: ['partner', 'software_dev', 'research']
+    },
+    {
+      id: 'voice',
+      name: 'Voice & Speech Synthesis',
+      description: 'Bilingual Bangla/English acoustic routing, barge-in speech cancellation, and feedback loop prevention.',
+      status: 'ACTIVE',
+      file: 'src/components/VoiceController.tsx',
+      supportedAgents: ['partner']
+    },
+    {
+      id: 'telegram',
+      name: 'Telegram Gateway Skill',
+      description: 'Secure bidirectional messaging, authorized ID whitelist enforcement, and mobile notifications.',
+      status: 'ACTIVE',
+      file: 'src/server/telegram.ts',
+      supportedAgents: ['partner']
+    }
+  ];
+  res.json({ skills });
+});
+
+apiRouter.post('/tasks/:id/approve', authGuard, (req: Request, res: Response) => {
+  const db = getDb();
+  const user = (req as any).user;
+  if (!db) return res.status(500).json({ error: 'DB unavailable' });
+  try {
+    db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime("now") WHERE id = ? AND username = ?`).run(req.params.id, user.username);
+    recordEvent(user.username, 'task_approved', 'Task Approved', `Task ${req.params.id} approved by executive.`, req.params.id);
+    res.json({ success: true, message: 'Task approved and queued for execution' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+apiRouter.post('/tasks/:id/reject', authGuard, (req: Request, res: Response) => {
+  const db = getDb();
+  const user = (req as any).user;
+  if (!db) return res.status(500).json({ error: 'DB unavailable' });
+  try {
+    db.prepare(`UPDATE tasks SET status = 'cancelled', updated_at = datetime("now") WHERE id = ? AND username = ?`).run(req.params.id, user.username);
+    recordEvent(user.username, 'task_rejected', 'Task Rejected', `Task ${req.params.id} rejected by executive.`, req.params.id);
+    res.json({ success: true, message: 'Task rejected and cancelled' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+apiRouter.post('/tasks/:id/retry', authGuard, (req: Request, res: Response) => {
+  const db = getDb();
+  const user = (req as any).user;
+  if (!db) return res.status(500).json({ error: 'DB unavailable' });
+  try {
+    db.prepare(`UPDATE tasks SET status = 'pending', error_json = NULL, updated_at = datetime("now") WHERE id = ? AND username = ?`).run(req.params.id, user.username);
+    res.json({ success: true, message: 'Task reset to pending queue for retry' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // -------------------------------------------------------------

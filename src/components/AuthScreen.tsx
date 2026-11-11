@@ -20,28 +20,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [needsPasswordChangeUser, setNeedsPasswordChangeUser] = useState<string | null>(null);
 
-  // Auto-login if token exists
+  const [recoveryEmailInput, setRecoveryEmailInput] = useState('');
+  const [recoveryStatus, setRecoveryStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Auto-login via HttpOnly session cookie
   useEffect(() => {
-    const token = localStorage.getItem('jarvis_session_token');
-    if (token) {
-      checkSession(token);
-    }
+    checkSession();
   }, []);
 
-  const checkSession = async (token: string) => {
+  const checkSession = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }
       });
       if (res.ok) {
         const data = await res.json();
-        onLoginSuccess({ ...data.user, token });
-      } else {
-        localStorage.removeItem('jarvis_session_token');
+        onLoginSuccess(data.user);
       }
     } catch {
-      localStorage.removeItem('jarvis_session_token');
+      // No active session cookie
     } finally {
       setLoading(false);
     }
@@ -55,6 +54,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: selectedUser, password, rememberMe }),
       });
@@ -68,10 +68,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         setNeedsPasswordChangeUser(data.user.username);
         setIsChangingPassword(true);
       } else {
-        if (rememberMe) {
-          localStorage.setItem('jarvis_session_token', data.token);
-        }
-        onLoginSuccess({ ...data.user, token: data.token });
+        onLoginSuccess(data.user);
       }
     } catch (err: any) {
       setError(err.message || 'Login error');
@@ -98,6 +95,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       const username = needsPasswordChangeUser || selectedUser;
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, newPassword }),
       });
@@ -105,24 +103,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Password update failed');
 
-      setStatusSuccess('Password updated successfully. Logging in...');
-      
-      // Auto login after success
-      const loginRes = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password: newPassword, rememberMe }),
-      });
-      const loginData = await loginRes.json();
-      
-      if (loginRes.ok) {
-        if (rememberMe) localStorage.setItem('jarvis_session_token', loginData.token);
-        setTimeout(() => onLoginSuccess({ ...loginData.user, token: loginData.token }), 1000);
-      } else {
-        throw new Error(loginData.error || 'Auto-login failed after password change');
-      }
+      setStatusSuccess('Security policy applied. Session authenticated.');
+      setTimeout(() => onLoginSuccess(data.user), 800);
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setRecoveryStatus(null);
+    if (!recoveryEmailInput.trim()) {
+      setError('Please provide an email address.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoveryEmailInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Recovery service unavailable.');
+      } else {
+        setRecoveryStatus({ success: true, message: data.message });
+      }
+    } catch (err: any) {
+      setError(err.message || 'Recovery request error');
     } finally {
       setLoading(false);
     }
@@ -139,17 +152,50 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             <h1 className="text-2xl font-black tracking-tight">Account Recovery</h1>
             <p className="text-sm text-slate-400 mt-2 pr-4 pl-4">Provide your verified email address to receive a secure recovery link.</p>
           </div>
-          <div className="space-y-6">
+
+          {error && (
+            <div className="mb-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-xs text-rose-400 flex items-start gap-3">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="font-medium leading-relaxed">{error}</span>
+            </div>
+          )}
+
+          {recoveryStatus?.message && (
+            <div className="mb-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-xs text-emerald-400 flex items-center gap-3">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span className="font-medium">{recoveryStatus.message}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleForgotPassword} className="space-y-6">
             <div className="space-y-2">
               <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest ml-1">Verified Email</label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
-                <input type="email" placeholder="sakib@example.com" className="w-full bg-slate-950 border border-slate-800 rounded-2xl pl-12 pr-4 py-4 text-sm focus:outline-none focus:border-indigo-500 transition-all" />
+                <input 
+                  type="email" 
+                  value={recoveryEmailInput}
+                  onChange={e => setRecoveryEmailInput(e.target.value)}
+                  placeholder="sakib@example.com" 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl pl-12 pr-4 py-4 text-sm focus:outline-none focus:border-indigo-500 transition-all" 
+                />
               </div>
             </div>
-            <button className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/20">SEND RECOVERY LINK</button>
-            <button onClick={() => setIsForgotPassword(false)} className="w-full text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest">Return to Login</button>
-          </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/20 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'SEND RECOVERY LINK'}
+            </button>
+            <button 
+              type="button" 
+              onClick={() => { setIsForgotPassword(false); setError(''); setRecoveryStatus(null); }} 
+              className="w-full text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
+            >
+              Return to Login
+            </button>
+          </form>
         </div>
       </div>
     );

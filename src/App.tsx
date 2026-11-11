@@ -99,19 +99,18 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   /**
-   * API Helper with Auth
+   * API Helper with HttpOnly Cookie & Bearer Auth
    */
   const apiFetch = async (path: string, options: any = {}) => {
     const headers = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${currentUser?.token}`,
+      ...(currentUser?.token ? { 'Authorization': `Bearer ${currentUser.token}` } : {}),
       ...options.headers
     };
-    const res = await fetch(path, { ...options, headers });
+    const res = await fetch(path, { credentials: 'same-origin', ...options, headers });
     if (res.status === 401) {
-      localStorage.removeItem('jarvis_session_token');
       setCurrentUser(null);
-      return res; // AuthScreen will handle it
+      return res;
     }
     return res;
   };
@@ -275,6 +274,13 @@ export default function App() {
     setActiveView('assistant');
   };
 
+  const createTask = async (taskData: any) => {
+    try {
+      await apiFetch('/api/tasks', { method: 'POST', body: JSON.stringify(taskData) });
+      loadAllData();
+    } catch {}
+  };
+
   const updateTask = async (id: string, updates: any) => {
     try {
       await apiFetch(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(updates) });
@@ -291,7 +297,6 @@ export default function App() {
 
   const handleLogout = () => {
     apiFetch('/api/auth/logout', { method: 'POST' });
-    localStorage.removeItem('jarvis_session_token');
     setCurrentUser(null);
   };
 
@@ -497,7 +502,7 @@ export default function App() {
           )}
 
           {activeView === 'tasks' && (
-            <TaskCenterView tasks={tasks} onUpdateTask={updateTask} onCreateTask={() => {}} />
+            <TaskCenterView tasks={tasks} onUpdateTask={updateTask} onCreateTask={createTask} />
           )}
 
           {activeView === 'agents' && (
