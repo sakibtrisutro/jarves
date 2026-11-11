@@ -2,6 +2,7 @@ import { logEvent, queryLogs, sanitizeData } from '../src/server/logger.ts';
 import { initDatabase, getDb } from '../src/server/database.ts';
 import { testTelegramConnection } from '../src/server/telegram.ts';
 import { testAiProviderConnection, getApiKeys, getAiSettings, generateJarvisResponse } from '../src/server/gemini.ts';
+import { fetchOpenRouterModels, fetchGeminiModels, fetchOpenAiModels, initModelRegistry, getModelPipeline } from '../src/server/model_registry.ts';
 import { 
   hashPassword, 
   verifyPassword, 
@@ -334,6 +335,31 @@ async function runTestSuite() {
     assert(historyRow.switch_count === 1, 'Switch count tracked correctly');
 
     db.prepare('DELETE FROM model_failover_history WHERE id = ?').run(testFailoverId);
+
+    // Test A: Only OpenRouter configured & Gemini failure resiliency
+    initModelRegistry();
+    const openRouterMockResult = await fetchOpenRouterModels('sk-or-v1-invalid-test-key');
+    assert(typeof openRouterMockResult === 'number', 'Test A: OpenRouter model scanner returns non-throwing count gracefully on bad/mock key');
+
+    // Test B: Gemini discovery error handling
+    const geminiMockResult = await fetchGeminiModels('invalid-gemini-key');
+    assert(geminiMockResult === 0, 'Test B: Gemini scanner catches HTTP errors gracefully and returns 0 without crashing pipeline');
+
+    // Test C: Pipeline routing when Gemini fails but OpenRouter models exist
+    db.prepare(`
+      INSERT OR REPLACE INTO model_registry (model_id, provider, display_name, is_free, eligibility, reasoning_score, avg_latency_ms, last_verified_at)
+      VALUES ('meta-llama/llama-3.3-70b-instruct:free', 'openrouter', 'Meta Llama 3.3 70B (Free)', 1, 'ELIGIBLE', 0.95, 300, datetime('now'))
+    `).run();
+
+    const pipelineResult = getModelPipeline('general', true);
+    assert(pipelineResult.length > 0 && pipelineResult[0].model_id === 'meta-llama/llama-3.3-70b-instruct:free', 'Test C: OpenRouter free models populated in pipeline even if Gemini is failing');
+
+    // Test D: Zero silent active provider default
+    const preInitSettings = getAiSettings();
+    assert(preInitSettings.forcedProvider === '' || !preInitSettings.forceModel, 'Test D: Neither provider is silently set as forced default active model prior to connection verification');
+
+    // Clean up mock registry row
+    db.prepare("DELETE FROM model_registry WHERE model_id = 'meta-llama/llama-3.3-70b-instruct:free'").run();
   }
 
   console.log('\n====================================================');

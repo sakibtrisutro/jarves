@@ -56,13 +56,28 @@ export function initModelRegistry() {
  * Discovers and synchronizes models from Gemini API catalog
  */
 export async function fetchGeminiModels(apiKey: string): Promise<number> {
+  if (!apiKey || !apiKey.trim()) return 0;
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+    logEvent({
+      level: 'INFO',
+      category: 'API',
+      component: 'GeminiDiscovery',
+      message: 'Starting Gemini model discovery...'
+    });
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`, {
       signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
-      throw new Error(`Gemini Models API returned HTTP ${res.status}`);
+      const errText = await res.text().catch(() => '');
+      logEvent({
+        level: 'WARNING',
+        category: 'API',
+        component: 'GeminiDiscovery',
+        message: `Gemini Models API returned HTTP ${res.status}: ${errText.substring(0, 100)}`
+      });
+      return 0;
     }
 
     const data = (await res.json()) as any;
@@ -83,9 +98,8 @@ export async function fetchGeminiModels(apiKey: string): Promise<number> {
       const name = m.name || '';
       const cleanId = name.replace(/^models\//, '');
       const methods = m.supportedGenerationMethods || [];
-      if (!methods.includes('generateContent')) continue;
+      if (methods.length > 0 && !methods.includes('generateContent')) continue;
 
-      // Deterministic free detection for Gemini
       const isFree = cleanId.includes('flash') || cleanId.includes('1.5') || cleanId.includes('2.0') || cleanId.includes('lite');
       const inputCost = isFree ? 0.0 : 0.000001;
       const outputCost = isFree ? 0.0 : 0.000004;
@@ -95,10 +109,22 @@ export async function fetchGeminiModels(apiKey: string): Promise<number> {
       count++;
     }
 
+    logEvent({
+      level: 'INFO',
+      category: 'API',
+      component: 'GeminiDiscovery',
+      message: `Gemini discovery completed: ${count} models registered.`
+    });
+
     return count;
   } catch (err: any) {
-    console.error('Gemini discovery failed:', err);
-    throw err;
+    logEvent({
+      level: 'WARNING',
+      category: 'API',
+      component: 'GeminiDiscovery',
+      message: `Gemini discovery failed: ${err.message}`
+    });
+    return 0;
   }
 }
 
@@ -106,14 +132,29 @@ export async function fetchGeminiModels(apiKey: string): Promise<number> {
  * Discovers and synchronizes models from OpenAI API catalog
  */
 export async function fetchOpenAiModels(apiKey: string): Promise<number> {
+  if (!apiKey || !apiKey.trim()) return 0;
   try {
+    logEvent({
+      level: 'INFO',
+      category: 'API',
+      component: 'OpenAiDiscovery',
+      message: 'Starting OpenAI model discovery...'
+    });
+
     const res = await fetch('https://api.openai.com/v1/models', {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${apiKey.trim()}` },
       signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
-      throw new Error(`OpenAI Models API returned HTTP ${res.status}`);
+      const errText = await res.text().catch(() => '');
+      logEvent({
+        level: 'WARNING',
+        category: 'API',
+        component: 'OpenAiDiscovery',
+        message: `OpenAI Models API returned HTTP ${res.status}: ${errText.substring(0, 100)}`
+      });
+      return 0;
     }
 
     const data = (await res.json()) as any;
@@ -132,15 +173,27 @@ export async function fetchOpenAiModels(apiKey: string): Promise<number> {
 
     for (const m of rawModels) {
       const id = m.id;
-      if (!id.startsWith('gpt-') && !id.startsWith('o1') && !id.startsWith('o3')) continue;
+      if (!id || (!id.startsWith('gpt-') && !id.startsWith('o1') && !id.startsWith('o3'))) continue;
       stmt.run(id, `OpenAI ${id}`);
       count++;
     }
 
+    logEvent({
+      level: 'INFO',
+      category: 'API',
+      component: 'OpenAiDiscovery',
+      message: `OpenAI discovery completed: ${count} models registered.`
+    });
+
     return count;
   } catch (err: any) {
-    console.error('OpenAI discovery failed:', err);
-    throw err;
+    logEvent({
+      level: 'WARNING',
+      category: 'API',
+      component: 'OpenAiDiscovery',
+      message: `OpenAI discovery failed: ${err.message}`
+    });
+    return 0;
   }
 }
 
@@ -148,22 +201,37 @@ export async function fetchOpenAiModels(apiKey: string): Promise<number> {
  * Fetches and synchronizes models from OpenRouter catalog API
  */
 export async function fetchOpenRouterModels(apiKey: string): Promise<number> {
+  if (!apiKey || !apiKey.trim()) return 0;
   try {
+    logEvent({
+      level: 'INFO',
+      category: 'API',
+      component: 'OpenRouterDiscovery',
+      message: 'Starting OpenRouter model discovery...'
+    });
+
     const res = await fetch('https://openrouter.ai/api/v1/models', {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey.trim()}`,
         'HTTP-Referer': 'https://jarvis.trisutro.bond',
         'X-Title': 'JARVIS Executive AI',
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!res.ok) {
-      throw new Error(`OpenRouter API returned HTTP ${res.status}`);
+      const errText = await res.text().catch(() => '');
+      logEvent({
+        level: 'WARNING',
+        category: 'API',
+        component: 'OpenRouterDiscovery',
+        message: `OpenRouter API returned HTTP ${res.status}: ${errText.substring(0, 100)}`
+      });
+      return 0;
     }
 
     const data = (await res.json()) as any;
-    const models = data.data || [];
+    const models = data.data || data.models || [];
     const db = getDb();
     if (!db) return 0;
 
@@ -178,29 +246,42 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<number> {
 
     for (const m of models) {
       const modelId = m.id;
+      if (!modelId) continue;
       const name = m.name || modelId;
       const pricing = m.pricing || {};
-      const promptCost = parseFloat(pricing.prompt || '0');
-      const completionCost = parseFloat(pricing.completion || '0');
+      const promptCost = parseFloat(String(pricing.prompt ?? '0'));
+      const completionCost = parseFloat(String(pricing.completion ?? '0'));
       
-      // Strict free detection for OpenRouter
-      const isFree = promptCost === 0 && completionCost === 0 && (modelId.includes(':free') || name.toLowerCase().includes('free'));
+      // Flexible free detection for OpenRouter models
+      const isFree = (promptCost === 0 && completionCost === 0) || modelId.endsWith(':free') || modelId.includes(':free') || name.toLowerCase().includes('(free)');
 
       stmt.run(
         modelId,
         name,
         isFree ? 1 : 0,
-        promptCost,
-        completionCost,
+        isNaN(promptCost) ? 0.0 : promptCost,
+        isNaN(completionCost) ? 0.0 : completionCost,
         m.context_length || 8192
       );
       count++;
     }
 
+    logEvent({
+      level: 'INFO',
+      category: 'API',
+      component: 'OpenRouterDiscovery',
+      message: `OpenRouter discovery completed: ${count} models registered.`
+    });
+
     return count;
   } catch (err: any) {
-    console.error('OpenRouter discovery failed:', err);
-    throw err;
+    logEvent({
+      level: 'WARNING',
+      category: 'API',
+      component: 'OpenRouterDiscovery',
+      message: `OpenRouter discovery failed: ${err.message}`
+    });
+    return 0;
   }
 }
 
@@ -228,10 +309,15 @@ export function getModelPipeline(taskType: string, freeOnly: boolean): any[] {
     sql += ' ORDER BY (reasoning_score + success_rate) DESC, avg_latency_ms ASC';
   }
 
-  sql += ' LIMIT 5';
+  sql += ' LIMIT 10';
 
   try {
-    return db.prepare(sql).all();
+    const results = db.prepare(sql).all();
+    if (results.length === 0 && freeOnly) {
+      // Fallback query: if no models are strictly flagged free, return any eligible model
+      return db.prepare("SELECT * FROM model_registry WHERE eligibility = 'ELIGIBLE' ORDER BY avg_latency_ms ASC LIMIT 10").all();
+    }
+    return results;
   } catch (err) {
     console.error('Failed to get model pipeline:', err);
     return [];

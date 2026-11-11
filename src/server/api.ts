@@ -13,6 +13,7 @@ import {
   fetchGeminiModels,
   fetchOpenAiModels,
   initModelRegistry,
+  getModelPipeline,
 } from './model_registry.ts';
 import { getUserMemories, saveUserMemory, deleteUserMemory, getEpisodicMemories, recordEvent } from './memory.ts';
 import { 
@@ -349,19 +350,55 @@ apiRouter.get('/models', authGuard, (req: Request, res: Response) => {
 apiRouter.post('/models/discover', authGuard, async (req: Request, res: Response) => {
   const { provider } = req.body;
   const keys = getApiKeys();
+  const results: Record<string, { count: number }> = {};
   let total = 0;
+
   try {
+    initModelRegistry();
+
     if (!provider || provider === 'all' || provider === 'gemini') {
       const k = keys.gemini || process.env.GEMINI_API_KEY;
-      if (k) total += await fetchGeminiModels(k);
+      if (k) {
+        const count = await fetchGeminiModels(k);
+        results.gemini = { count };
+        total += count;
+      }
     }
     if (!provider || provider === 'all' || provider === 'openai') {
-      if (keys.openai) total += await fetchOpenAiModels(keys.openai);
+      if (keys.openai) {
+        const count = await fetchOpenAiModels(keys.openai);
+        results.openai = { count };
+        total += count;
+      }
     }
     if (!provider || provider === 'all' || provider === 'openrouter') {
-      if (keys.openrouter) total += await fetchOpenRouterModels(keys.openrouter);
+      if (keys.openrouter) {
+        const count = await fetchOpenRouterModels(keys.openrouter);
+        results.openrouter = { count };
+        total += count;
+      }
     }
-    res.json({ success: true, totalDiscovered: total });
+
+    const db = getDb();
+    if (db) {
+      const registeredCount = (db.prepare("SELECT COUNT(*) as cnt FROM model_registry WHERE eligibility = 'ELIGIBLE'").get() as any)?.cnt || 0;
+      const freeCount = (db.prepare("SELECT COUNT(*) as cnt FROM model_registry WHERE eligibility = 'ELIGIBLE' AND is_free = 1").get() as any)?.cnt || 0;
+      
+      const pipeline = getModelPipeline('general', true);
+      const topCandidate = pipeline[0];
+
+      db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES ('intelligence_status', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(JSON.stringify({
+        status: registeredCount > 0 ? 'ACTIVE' : 'FAILED',
+        lastInitialized: new Date().toISOString(),
+        discoveredCount: registeredCount,
+        freeCount,
+        activeProvider: topCandidate?.provider || 'NONE',
+        activeModel: topCandidate?.model_id || 'NONE',
+        providerDetails: results
+      }));
+    }
+
+    res.json({ success: true, totalDiscovered: total, details: results });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -374,15 +411,66 @@ apiRouter.post('/models/initialize-intelligence', authGuard, async (req: Request
   try {
     initModelRegistry();
     const keys = getApiKeys();
-    let discovered = 0;
-    if (keys.gemini || process.env.GEMINI_API_KEY) discovered += await fetchGeminiModels(keys.gemini || (process.env.GEMINI_API_KEY as string));
-    if (keys.openai) discovered += await fetchOpenAiModels(keys.openai);
-    if (keys.openrouter) discovered += await fetchOpenRouterModels(keys.openrouter);
+    const results: Record<string, { status: string; count: number }> = {};
 
-    db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES ('intelligence_status', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(JSON.stringify({ status: discovered > 0 ? 'ACTIVE' : 'FAILED', lastInitialized: new Date().toISOString(), discoveredCount: discovered }));
+    if (keys.gemini || process.env.GEMINI_API_KEY) {
+      const k = keys.gemini || (process.env.GEMINI_API_KEY as string);
+      const count = await fetchGeminiModels(k);
+      results.gemini = { status: count > 0 ? 'OK' : 'WARNING', count };
+    }
 
-    logEvent({ level: 'INFO', category: 'API', component: 'ModelIntelligenceEngine', message: `Intelligence Initialized. Discovered: ${discovered}` });
-    res.json({ success: true, discoveredCount: discovered });
+    if (keys.openai) {
+      const count = await fetchOpenAiModels(keys.openai);
+      results.openai = { status: count > 0 ? 'OK' : 'WARNING', count };
+    }
+
+    if (keys.openrouter) {
+      const count = await fetchOpenRouterModels(keys.openrouter);
+      results.openrouter = { status: count > 0 ? 'OK' : 'WARNING', count };
+    }
+
+    const registeredCount = (db.prepare("SELECT COUNT(*) as cnt FROM model_registry WHERE eligibility = 'ELIGIBLE'").get() as any)?.cnt || 0;
+    const freeCount = (db.prepare("SELECT COUNT(*) as cnt FROM model_registry WHERE eligibility = 'ELIGIBLE' AND is_free = 1").get() as any)?.cnt || 0;
+
+    const pipeline = getModelPipeline('general', true);
+    const topCandidate = pipeline[0];
+
+    const activeProvider = topCandidate?.provider || (keys.openrouter ? 'openrouter' : keys.openai ? 'openai' : keys.gemini ? 'gemini' : 'NONE');
+    const activeModel = topCandidate?.model_id || 'NONE';
+
+    const statusStr = registeredCount > 0 ? 'ACTIVE' : 'FAILED';
+    const lastError = registeredCount > 0 ? null : 'No eligible models discovered across configured providers.';
+
+    const statusPayload = {
+      status: statusStr,
+      lastInitialized: new Date().toISOString(),
+      discoveredCount: registeredCount,
+      freeCount,
+      activeProvider,
+      activeModel,
+      providerDetails: results,
+      lastError
+    };
+
+    db.prepare("INSERT INTO settings (key, value_json, updated_at) VALUES ('intelligence_status', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at").run(JSON.stringify(statusPayload));
+
+    logEvent({
+      level: statusStr === 'ACTIVE' ? 'INFO' : 'WARNING',
+      category: 'API',
+      component: 'ModelIntelligenceEngine',
+      message: `Intelligence Initialized: ${statusStr}. Discovered: ${registeredCount} models (${freeCount} free). Active: ${activeModel}`
+    });
+
+    res.json({
+      success: true,
+      status: statusStr,
+      discoveredCount: registeredCount,
+      freeCount,
+      activeProvider,
+      activeModel,
+      providerDetails: results,
+      lastError
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -392,15 +480,23 @@ apiRouter.get('/models/status', authGuard, (req: Request, res: Response) => {
   const db = getDb();
   const keys = getApiKeys();
   const settings = getAiSettings();
-  let intel: any = { status: 'NOT_INITIALIZED' };
+  let intel: any = { status: 'NOT_INITIALIZED', discoveredCount: 0, freeCount: 0, activeProvider: 'NONE', activeModel: 'NONE' };
+
   if (db) {
     try {
       const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get('intelligence_status') as any;
       if (row?.value_json) intel = JSON.parse(row.value_json);
     } catch {}
   }
-  const isConfigured = Boolean(keys.gemini || keys.openai || keys.openrouter || process.env.GEMINI_API_KEY);
-  res.json({ isConfigured, intelligence: intel, settings });
+
+  const keyStatus = {
+    gemini: Boolean(keys.gemini || process.env.GEMINI_API_KEY),
+    openai: Boolean(keys.openai),
+    openrouter: Boolean(keys.openrouter)
+  };
+  const isConfigured = Boolean(keyStatus.gemini || keyStatus.openai || keyStatus.openrouter);
+
+  res.json({ isConfigured, keyStatus, intelligence: intel, settings });
 });
 
 // -------------------------------------------------------------

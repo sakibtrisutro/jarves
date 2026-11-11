@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { logEvent } from './logger.ts';
-import { getModelPipeline, updateModelStats } from './model_registry.ts';
+import { getModelPipeline, updateModelStats, fetchOpenRouterModels, fetchGeminiModels, fetchOpenAiModels } from './model_registry.ts';
 import { getDb } from './database.ts';
 import { getUserMemories } from './memory.ts';
 
@@ -98,6 +98,15 @@ export async function generateJarvisResponse(
       : 'general';
 
     pipeline = getModelPipeline(taskType, freeOnly);
+  }
+
+  if (pipeline.length === 0) {
+    // Emergency auto-discovery attempt if registry table is empty
+    if (storedKeys.openrouter) await fetchOpenRouterModels(storedKeys.openrouter);
+    if (storedKeys.gemini || process.env.GEMINI_API_KEY) await fetchGeminiModels(storedKeys.gemini || (process.env.GEMINI_API_KEY as string));
+    if (storedKeys.openai) await fetchOpenAiModels(storedKeys.openai);
+
+    pipeline = getModelPipeline('general', freeOnly);
   }
 
   if (pipeline.length === 0) {
@@ -273,15 +282,13 @@ export async function testAiProviderConnection(providerName: string, apiKey?: st
 
   try {
     if (providerName === 'openrouter') {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'meta-llama/llama-3.3-70b-instruct:free', messages: [{ role: 'user', content: 'Ping' }], max_tokens: 1 }),
-        signal: AbortSignal.timeout(6000),
+      const res = await fetch('https://openrouter.ai/api/v1/models', {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } else if (providerName === 'openai') {
-      const res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(6000) });
+      const res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } else {
       const testAi = new GoogleGenAI({ apiKey: key });
